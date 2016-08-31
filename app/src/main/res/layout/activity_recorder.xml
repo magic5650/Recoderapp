@@ -13,6 +13,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:theme="@style/AppTheme"
         android:minHeight="?attr/actionBarSize"
         android:background="?attr/colorPrimary"
         android:fitsSystemWindows="true"
@@ -27,11 +28,10 @@
     </android.support.v7.widget.Toolbar>
     <ListView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="240dp"
         android:id="@+id/recorder_ListView"
         android:layout_gravity="center_horizontal|start"
         android:divider="@drawable/shapeline"
-        android:layout_weight="3"
         android:drawSelectorOnTop="true" />
     <Chronometer
         android:id="@+id/chronometer"

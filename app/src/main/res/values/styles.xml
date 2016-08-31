@@ -5,6 +5,8 @@
     <style name="BaseTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="colorPrimary">@color/accent_material_dark</item>
         <item name="colorPrimaryDark">@color/accent_material_dark</item>
+        <item name="autoCompleteTextViewStyle">@style/Widget.MyApp.AutoCompleteTextView.SearchView</item>
+        <item name="searchViewStyle">@style/SearchViewStyleMyApp</item>
     </style>
     <!-- toolbar弹出菜单样式 -->
     <style name="ToolbarPopupTheme" parent="@android:style/Theme.Holo">
@@ -15,5 +17,12 @@
     </style>
     <style name="OverflowMenuStyle" parent="Widget.AppCompat.Light.PopupMenu.Overflow">
         <item name="overlapAnchor">false</item>  <!--把该属性改为false即可使menu位置位于toolbar之下-->
+    </style>
+    <style name="SearchViewStyleMyApp" parent="Widget.AppCompat.SearchView">
+        <item name="searchIcon">@drawable/ic_open_search</item>
+    </style>
+    <style name="Widget.MyApp.AutoCompleteTextView.SearchView" parent="Widget.AppCompat.AutoCompleteTextView">
+        <item name="android:textColor">@color/color_white</item>
+        <item name="android:textColorHint">@color/color_white</item>
     </style>
 </resources>

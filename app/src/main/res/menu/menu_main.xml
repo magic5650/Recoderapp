@@ -23,17 +23,8 @@
 
         </menu>
     </item>
-    <item
-        android:id="@+id/search_bar"
-        android:icon="@drawable/ic_search_white_24dp"
-        android:orderInCategory="2"
+    <item android:id="@+id/search_bar"
         android:title="@string/search_bar"
-        app:showAsAction="ifRoom" />
-    <item
-        android:id = "@+id/submit_area"
-        android:title="@string/submit_area"
-        android:orderInCategory="1"
-        android:icon="@drawable/ic_keyboard_arrow_down_white_24dp"
-        app:showAsAction="ifRoom" >
-    </item>
+        app:showAsAction="ifRoom"
+        app:actionViewClass="android.support.v7.widget.SearchView" />
 </menu>
