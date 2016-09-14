@@ -5,4 +5,8 @@
     <string name="menu_help">帮助</string>
     <string name="search_bar">搜索</string>
     <string name="submit_area">菜单</string>
+    <string name="title_activity_audioplay">AudioplayActivity</string>
+    <string name="title_activity_video_view">VideoViewActivity</string>
+    <string name="title_activity_audio_player">AudioPlayerActivity</string>
+    <string name="title_activity_media_play">MediaPlayActivity</string>
 </resources>

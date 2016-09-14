@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/recorder_list"
+    android:orientation="horizontal"
+    android:layout_width="fill_parent"
+    android:descendantFocusability="beforeDescendants"
+    android:layout_height="?android:attr/listPreferredItemHeight">
+    <TextView android:id="@+id/id"
+        android:layout_width="wrap_content"
+        android:layout_height="fill_parent"
+        android:visibility="gone" />
+    <ImageView android:id="@+id/icon"
+        android:layout_width="70dp"
+        android:layout_height="70dp"
+        android:adjustViewBounds="true"
+        android:layout_gravity="center|start"
+        android:gravity="center"
+        android:padding="8dp"/>
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="70dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="45dp"
+            android:orientation="horizontal">
+            <TextView android:id="@+id/name"
+                android:layout_width="0dp"
+                android:layout_height="fill_parent"
+                android:layout_weight="2"
+                android:gravity="start|center_vertical"
+                android:textColor="@color/text_color"
+                android:textSize="20sp" />
+            <TextView android:id="@+id/often"
+                android:layout_width="80dp"
+                android:layout_height="fill_parent"
+                android:layout_marginEnd="40dp"
+                android:textSize="20sp"
+                android:textColor="@color/text_color"
+                android:gravity="start|center" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="25dp"
+            android:orientation="horizontal">
+            <TextView android:id="@+id/info"
+                android:layout_width="0dp"
+                android:layout_height="fill_parent"
+                android:layout_weight="2"
+                android:textSize="12sp"
+                android:textColor="@color/color_grey_light"
+                android:gravity="top" />
+            <TextView android:id="@+id/create_time"
+                android:layout_width="80dp"
+                android:layout_height="fill_parent"
+                android:textSize="12sp"
+                android:textColor="@color/color_grey_light"
+                android:gravity="top" />
+        </LinearLayout>
+    </LinearLayout>
+    <ImageView android:id="@+id/action"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:adjustViewBounds="true"
+        android:layout_gravity="center_vertical"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"/>
+</LinearLayout>

@@ -25,4 +25,11 @@
         <item name="android:textColor">@color/color_white</item>
         <item name="android:textColorHint">@color/color_white</item>
     </style>
+    <style name="Transparent" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/transparent_background</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <!-- 如果需要导航栏也透明加下面这行代码值改为true -->
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
 </resources>

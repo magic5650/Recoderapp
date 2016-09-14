@@ -4,5 +4,5 @@
     android:layout_width="match_parent">
 
     <size android:height="1dp"/>
-    <solid android:color="@color/accent_material_dark"/>
+    <solid android:color="@color/color_grey_light2"/>
 </shape>
