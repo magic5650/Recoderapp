@@ -3,10 +3,8 @@
     <string name="more_action">更多</string>
     <string name="more_record">更多录音</string>
     <string name="menu_help">帮助</string>
+    <string name="menu_update">更新</string>
     <string name="search_bar">搜索</string>
     <string name="submit_area">菜单</string>
-    <string name="title_activity_audioplay">AudioplayActivity</string>
-    <string name="title_activity_video_view">VideoViewActivity</string>
-    <string name="title_activity_audio_player">AudioPlayerActivity</string>
     <string name="title_activity_media_play">MediaPlayActivity</string>
 </resources>

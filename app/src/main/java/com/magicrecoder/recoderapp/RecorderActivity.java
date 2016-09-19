@@ -2,11 +2,15 @@ package com.magicrecoder.recoderapp;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
 import android.os.SystemClock;
+import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -15,6 +19,7 @@ import android.support.v7.widget.PopupMenu;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.ContextMenu;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -32,16 +37,17 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.magicrecoder.greendao.DaoSession;
 import com.magicrecoder.greendao.RecorderInfoDao;
 import com.readystatesoftware.systembartint.SystemBarTintManager;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.io.FilenameFilter;
 import java.util.Locale;
@@ -59,42 +65,58 @@ public class RecorderActivity extends AppCompatActivity {
     private MediaRecorder mMediaRecorder;// MediaRecorder对象
     private String Filename;//录音文件绝对路径
     private Chronometer chronometer;//定义计时器
-    RecorderInfo backObject = null;
-    String backFileName;
-    private RecorderInfoDao recorderInfoDao;
+    private RecorderInfoDao recorderInfoDao;//数据库连接session
+    SharedPreferences recentPlay;
+    Intent intent;
 
+
+    private static class MyHandler extends Handler {
+        private final WeakReference<AppCompatActivity> mActivity;
+
+        public MyHandler(AppCompatActivity activity) {
+            mActivity = new WeakReference<AppCompatActivity>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            AppCompatActivity activity = mActivity.get();
+            if (activity != null) {
+                // ...
+            }
+        }
+    }
+
+    private final MyHandler mHandler = new MyHandler(this) {
+        @Override
+        public void handleMessage(Message msg) {
+            if(msg.what==1){
+                Log.d(TAG,"接收到的信息为1，更新list");
+                init_recorder_list();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_recorder);
+        intent=getIntent();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                initRecorderData();
+                Message msg = Message.obtain();
+                msg.what = 1;
+                mHandler.sendMessage(msg);
+                Log.d(TAG,"发送信息，通知UI更新");
+            }
+        }).start();
+
         recorderListView = (ListView) findViewById(R.id.recorder_ListView) ;
         chronometer = (Chronometer) findViewById(R.id.chronometer);
-        recorderInfoDao = ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
-        init_recorder_list();
-        try {
-            Intent intent3 = getIntent();
-            backFileName = intent3.getStringExtra("fileName");
-            if ( backFileName != null) {
-                backObject = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Filepath.eq(backFileName)).unique();
-                if( backObject != null ) {
-                    recorderData.remove(backObject);
-                    recorderAdapter.notifyDataSetChanged();
-                    Log.d(TAG, "通知适配器");
-                }
-                else {
-                    Log.d(TAG,"根据返回的ID查的无此对象");
-                }
-                recorderInfoDao.deleteByKey(backObject.getId());//删除数据库对象
-                Log.d(TAG, "删除返回的object");
-            }
-            else {
-                Log.d(TAG, "返回的对象为空");
-            }
-        }catch (Exception e){
-            e.toString();
-        }
-        setStatusColor();
+        ClickListener();
+        //setStatusColor();
         //长按菜单弹出操作，注册列表
         registerForContextMenu(recorderListView);
         //添加Toolbar
@@ -105,6 +127,14 @@ public class RecorderActivity extends AppCompatActivity {
             toolbar.setOnMenuItemClickListener(onMenuItemClick);
         }
         Log.d(TAG, "MainActivity onCreate 创建，执行");
+    }
+    //launchMode为singleTask的时候，通过Intent启到一个Activity,如果系统已经存在一个实例，系统就会将请求发送到这个实例上，
+    // 但这个时候，系统就不会再调用通常情况下我们处理请求数据的onCreate方法，而是调用onNewIntent方法，如下所示:
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        Log.d(TAG,"MainActivity onNewIntent 创建，执行");
+        backDelRecorder(intent);
     }
 
     @Override
@@ -117,19 +147,8 @@ public class RecorderActivity extends AppCompatActivity {
     public void onResume() {
         super.onResume();
         Log.d(TAG, "MainActivity onResume 获取焦点 执行");
-        ClickListener();
-/*        Intent intent3 = getIntent();
-        backObject = intent3.getParcelableExtra("recorder");
-        if (backObject != null) {
-            getDao().deleteByKey(backObject.getId());//删除数据库对象
-            recorderData.remove(backObject);
-            Log.d(TAG, "删除返回的object");
-            recorderAdapter.notifyDataSetChanged();
-            Log.d(TAG, "通知适配器");
-        }
-        else {
-            Log.d(TAG, "返回的对象为空");
-        }*/
+        //初始化列表
+        //init_recorder_list();
     }
 
     @Override
@@ -154,13 +173,6 @@ public class RecorderActivity extends AppCompatActivity {
     public void onRestart() {
         super.onRestart();
         Log.d(TAG, "MainActivity onRestart 重新打开 执行");
-/*        Intent intent2 = getIntent();
-        backObject = intent2.getParcelableExtra("recorder");
-        getDao().deleteByKey(backObject.getId());//删除数据库对象
-        recorderData.remove(backObject);
-        Log.d(TAG,"删除返回的object");
-        recorderAdapter.notifyDataSetChanged();
-        Log.d(TAG,"通知适配器");*/
     }
 
     @Override
@@ -175,13 +187,33 @@ public class RecorderActivity extends AppCompatActivity {
         Log.d(TAG, "MainActivity onRestoreInstanceState 保存数据");
     }
 
+/*    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if(keyCode == KeyEvent.KEYCODE_BACK) {
+            // 监控返回键
+            new AlertDialog.Builder(RecorderActivity.this).setTitle("提示")
+                    .setIconAttribute(android.R.attr.alertDialogIcon)
+                    .setMessage("确定要退出吗?")
+                    .setPositiveButton("确认", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            RecorderActivity.this.finish();
+                        }})
+                    .setNegativeButton("取消", null)
+                    .create().show();
+            return false;
+        } else if(keyCode == KeyEvent.KEYCODE_MENU) {
+            // 监控菜单键
+            Toast.makeText(RecorderActivity.this, "Menu", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        return super.onKeyDown(keyCode, event);
+    }*/
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.menu_main, menu);
-
-/*        MenuInflater actionInflater = getMenuInflater();
-        actionInflater.inflate(R.menu.recorder_menu,menu);*/
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -212,6 +244,9 @@ public class RecorderActivity extends AppCompatActivity {
                     });
                     helpDialog.show();
                     return true;
+                case R.id.menu_update:
+                    Log.d(TAG, "软件更新");
+                    return true;
             }
             return false;
         }
@@ -238,18 +273,25 @@ public class RecorderActivity extends AppCompatActivity {
 
     /*初始化列表数据*/
     private void initRecorderData() {
-        recorderData = new ArrayList<>();
-        //按照插入时间倒序排序，也就是说时间晚的会在前面显示
-        recorderData = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list();
+        if (recorderData == null) {
+            recorderData = new ArrayList<>();
+            recorderInfoDao = ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
+            Log.d(TAG, "初始化数据库连接");
+            //按照插入时间倒序排序，也就是说时间晚的会在前面显示
+            recorderData = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list();
+            Log.d(TAG, "初始化列表数据结束");
+        }
     }
     //初始化列表
     private void init_recorder_list() {
-        if (recorderListView != null) {
+        //列表非空，且适配器为空才初始化
+        if (recorderListView != null && recorderAdapter == null) {
             LayoutInflater inflater = getLayoutInflater();
-            initRecorderData();
+            //initRecorderData();
+            Log.d(TAG,"绑定适配器数据");
             recorderAdapter = new RecorderAdapter(inflater, recorderData);
+            Log.d(TAG,"列表绑定适配器");
             recorderListView.setAdapter(recorderAdapter);
-
             //单击监听
             recorderListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
@@ -259,7 +301,7 @@ public class RecorderActivity extends AppCompatActivity {
                     if (audioFile.exists()) {
                         //playMusic(audioFile);
                         Log.d(TAG,"要开始播放了");
-                        //playAudio(recorderObject.getFilepath(),recorderObject.getOften());
+                        storeRecentPlay(recorderObject);
                         playAudio(recorderObject);
                     } else {
                         Toast.makeText(getBaseContext(), "录音文件不存在", Toast.LENGTH_SHORT).show();
@@ -324,13 +366,25 @@ public class RecorderActivity extends AppCompatActivity {
                                             String newName = editText.getText().toString();
                                             Log.d(TAG, newName);
                                             Log.d(TAG, "索引为" + position);
-                                            recorderObject.setName(newName);
-                                            recorderInfoDao.update(recorderObject);
-                                            recorderData.get(position).setName(newName);
-                                            updateView(position);//
-                                            //recorderAdapter.notifyDataSetChanged();
-                                            Toast.makeText(getBaseContext(), "修改成功", Toast.LENGTH_SHORT).show();
-                                            dialog.dismiss();
+                                            if (newName.equals(recorderObject.getName())) {
+                                                Toast.makeText(getBaseContext(), "名称未改动", Toast.LENGTH_SHORT).show();
+                                                editText.selectAll();
+                                            }
+                                            else {
+                                                int count = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Name.eq(newName)).build().list().size();
+                                                if (count >= 1) {
+                                                    Toast.makeText(getBaseContext(), "有重名录音", Toast.LENGTH_SHORT).show();
+                                                    editText.selectAll();
+                                                } else {
+                                                    recorderObject.setName(newName);
+                                                    recorderInfoDao.update(recorderObject);
+                                                    recorderData.get(position).setName(newName);
+                                                    updateView(position);//
+                                                    //recorderAdapter.notifyDataSetChanged();
+                                                    Toast.makeText(getBaseContext(), "修改成功", Toast.LENGTH_SHORT).show();
+                                                    dialog.dismiss();
+                                                }
+                                            }
                                         }
                                     });
                                     mBtnNO.setOnClickListener(new View.OnClickListener() {
@@ -391,10 +445,45 @@ public class RecorderActivity extends AppCompatActivity {
             });
         }
         else{
-            Log.d(TAG,"ArrayList非空");
+            Log.d(TAG,"recorderAdapter非空,无需更新");
         }
     }
-
+    //删除从MediaPlayActivity返回的对象
+    private void backDelRecorder(Intent intent) {
+        setIntent(intent);
+        try {
+            Intent intent2 = getIntent();
+            RecorderInfo delObject = intent2.getParcelableExtra("recorder");
+            Log.d(TAG,"尝试接收序列化的RecorderInfo对象");
+            if (delObject != null){
+                Log.d(TAG,"接收的recorder对象非空");
+                Log.d(TAG,"删除前,recorderData数组中录音对象个数为"+recorderData.size());
+                Iterator<RecorderInfo> iterator = recorderData.iterator();
+                while(iterator.hasNext()){
+                    RecorderInfo i = iterator.next();
+                    if(i.getName().equals(delObject.getName())){
+                        iterator.remove();
+                        Log.d(TAG, "删除recorderData中播放器回传回来的录音对象");
+                        recorderInfoDao.deleteByKey(i.getId());//删除数据库对象
+                        if (removeAudioFile(i.getFilepath()))//删除文件
+                        {
+                            Toast.makeText(getApplicationContext(), "删除成功", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(getApplicationContext(), "删除失败", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+                Log.d(TAG,"删除后,recorderData数组中录音对象个数为"+recorderData.size());
+                recorderAdapter.notifyDataSetChanged();
+                Log.d(TAG, "通知适配器更新");
+            }
+            else {
+                Log.d(TAG, "返回的recorder对象为空");
+            }
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+    }
     //长按列表弹出操作
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
@@ -417,7 +506,7 @@ public class RecorderActivity extends AppCompatActivity {
         final TextView dialogTitle=(TextView) dialogView.findViewById(R.id.dialogTitle);
         final TextView mBtnOK = (TextView) dialogView.findViewById(R.id.btnOK);
         final TextView mBtnNO = (TextView) dialogView.findViewById(R.id.btnNO);
-        RecorderInfo recorderObject= recorderData.get(position);
+        final RecorderInfo recorderObject= recorderData.get(position);
         switch (item.getItemId()) {
             case 0:
                 if (recorderObject.getId() != null) {
@@ -439,19 +528,29 @@ public class RecorderActivity extends AppCompatActivity {
                 editText.setText(recorderObject.getName());
                 editText.selectAll();
                 mBtnOK.setOnClickListener(new View.OnClickListener() {
-                    RecorderInfo recorder= recorderData.get(position);
                     @Override
                     public void onClick(View v) {
                         String newName = editText.getText().toString();
                         Log.d(TAG, newName);
-                        Log.d(TAG,"索引为"+position);
-                        recorder.setName(newName);
-                        recorderInfoDao.update(recorder);
-                        recorderData.get(position).setName(newName);
-                        updateView(position);
-                        //recorderAdapter.notifyDataSetChanged();
-                        Toast.makeText(getBaseContext(), "修改成功", Toast.LENGTH_SHORT).show();
-                        dialog.dismiss();
+                        Log.d(TAG, "索引为" + position);
+                        if (newName.equals(recorderObject.getName())) {
+                            Toast.makeText(getBaseContext(), "名称未改动", Toast.LENGTH_SHORT).show();
+                            editText.selectAll();
+                        } else {
+                            int count = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Name.eq(newName)).build().list().size();
+                            if (count >= 1) {
+                                Toast.makeText(getBaseContext(), "有重名录音", Toast.LENGTH_SHORT).show();
+                                editText.selectAll();
+                            } else {
+                                recorderObject.setName(newName);
+                                recorderInfoDao.update(recorderObject);
+                                recorderData.get(position).setName(newName);
+                                updateView(position);
+                                //recorderAdapter.notifyDataSetChanged();
+                                Toast.makeText(getBaseContext(), "修改成功", Toast.LENGTH_SHORT).show();
+                                dialog.dismiss();
+                            }
+                        }
                     }
                 });
                 mBtnNO.setOnClickListener(new View.OnClickListener() {
@@ -471,14 +570,12 @@ public class RecorderActivity extends AppCompatActivity {
                 mBtnOK.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        RecorderInfo recorderTwo=recorderData.get(position);
                         String newInfo = editText.getText().toString();
                         Log.d(TAG, newInfo);
-                        recorderTwo.setInfo(newInfo);
-                        recorderInfoDao.update(recorderTwo);
+                        recorderObject.setInfo(newInfo);
+                        recorderInfoDao.update(recorderObject);
                         recorderData.get(position).setInfo(newInfo);
                         updateView(position);
-                        //recorderAdapter.notifyDataSetChanged();
                         Toast.makeText(getBaseContext(), "修改成功", Toast.LENGTH_SHORT).show();
                         dialog.dismiss();
                     }
@@ -504,6 +601,7 @@ public class RecorderActivity extends AppCompatActivity {
         final ImageView save_record = (ImageView) findViewById(R.id.save_record);
         assert begin_record != null;
         assert save_record != null;
+        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
         begin_record.setOnClickListener(new ImageView.OnClickListener() {
             @Override
             public void onClick(View arg0) {
@@ -644,6 +742,7 @@ public class RecorderActivity extends AppCompatActivity {
     }
 
     /*录音文件存放路径*/
+    @Nullable
     private File getRecordDir() {
         if (sdcardIsValid()) {
             String path = Environment.getExternalStorageDirectory() + "/record";
@@ -668,7 +767,7 @@ public class RecorderActivity extends AppCompatActivity {
         return false;
     }
 
-    /* 播放录音文件 */
+    /* 隐式播放录音文件 */
     private void playMusic(File file) {
         Intent intent = new Intent();
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -678,12 +777,35 @@ public class RecorderActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    //private void playAudio(String filePath,String durationTime) {
+    /* 播放录音文件 */
     private void playAudio(RecorderInfo recorderObject) {
         Intent intent = new Intent(this, MediaPlayActivity.class);
         Log.d(TAG,"放入的文件名为"+recorderObject.getFilepath());
         intent.putExtra("recorder",recorderObject);
         startActivity(intent);
+        //RecorderActivity.this.finish();
+    }
+
+    //存储播放列表
+    private void storeRecentPlay(RecorderInfo recorderObject) {
+        Log.d(TAG,"存储播放记录");
+        recentPlay = getSharedPreferences("recentPlay", MODE_PRIVATE);
+        SharedPreferences.Editor editor = recentPlay.edit();
+
+        String one = recentPlay.getString("one","");
+        Log.d(TAG,"获取到的录音名one"+one);
+        String two = recentPlay.getString("two", "");
+        Log.d(TAG,"获取到的录音名two"+two);
+        String three = recentPlay.getString("three", "");
+        Log.d(TAG,"获取到的录音名three"+three);
+        String four = recentPlay.getString("four", "");
+        Log.d(TAG,"获取到的录音名four"+four);
+        editor.putString("four","");
+        editor.putString("three","");
+        editor.putString("two","");
+        editor.putString("one",recorderObject.getName());
+        // 提交数据修改
+        editor.apply();
     }
 
     /*通过 Recorderapplication 类提供的 getDaoSession() 获取具体 Dao*/

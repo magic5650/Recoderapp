@@ -48,6 +48,7 @@ public class AudioService extends Service {
             timer = null;
         }
         mAm.abandonAudioFocus(afChangeListener);
+        Log.d(TAG,"AudioService Destroy");
     }
     AudioManager.OnAudioFocusChangeListener afChangeListener = new AudioManager.OnAudioFocusChangeListener() {
         public void onAudioFocusChange(int focusChange) {
@@ -205,7 +206,7 @@ public class AudioService extends Service {
                     }
                 }
                 //开始计时任务后的5毫秒后第一次执行run方法，以后每500毫秒执行一次
-            }, 5, 500);
+            }, 5, 200);
         }
     }
     //获取播放状态

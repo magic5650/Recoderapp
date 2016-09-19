@@ -20,6 +20,7 @@ public class RecorderInfo implements Parcelable {
     @Index
     private String filepath;//录音文件路径
     private int icon;  //录音图标
+    @Unique
     private String name;//录音名字
     private String often;//录音时常
     private String info;//录音信息
@@ -42,9 +43,6 @@ public class RecorderInfo implements Parcelable {
         this.tag = tag;
         this.action=action;
     }
-    @Keep
-    public RecorderInfo() {
-    }
 
     protected RecorderInfo(Parcel in) {
         filepath = in.readString();
@@ -56,6 +54,10 @@ public class RecorderInfo implements Parcelable {
         create_user = in.readString();
         tag = in.readString();
         action = in.readInt();
+    }
+
+    @Generated(hash = 1817692510)
+    public RecorderInfo() {
     }
 
     @Override

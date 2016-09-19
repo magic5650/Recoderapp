@@ -5,17 +5,21 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.AdapterView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -23,6 +27,8 @@ import android.widget.Toast;
 import com.magicrecoder.greendao.RecorderInfoDao;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class MediaPlayActivity extends Activity {
@@ -42,6 +48,9 @@ public class MediaPlayActivity extends Activity {
     private ImageView delAudio;
     private LinearLayout.LayoutParams miss = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,0);
     private LinearLayout.LayoutParams show = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1);
+    private List<RecorderInfo> recentPlayData;//listView数据对象
+    private PlayListAdapter playListAdapter;//适配器对象
+    private ListView recentPlayListView;//最近播放列表对象
 
     static Handler handler = new Handler(){//handler是谷歌说明的定义成静态的，
         public void handleMessage(android.os.Message msg) {
@@ -92,8 +101,8 @@ public class MediaPlayActivity extends Activity {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "MediaPlayActivity onCreate 创建 执行");
         setContentView(R.layout.activity_media_play);
+        recentPlayListView = (ListView) findViewById(R.id.recent_play_list) ;
         setStatusColor();
-        //getActionBar().setDisplayHomeAsUpEnabled(true);
         tx_currentTime = (TextView) findViewById(R.id.tx_currentTime);
         tx_currentTime.setText("00:00");
         seekBar = (SeekBar) findViewById(R.id.seedBar);
@@ -163,14 +172,14 @@ public class MediaPlayActivity extends Activity {
     @Override
     public  void onResume() {
         super.onResume();
-        Log.d(TAG, "MainActivity onResume 获取焦点 执行");
+        init_play_list();
+        Log.d(TAG, "MediaPlayActivity onResume 获取焦点 执行");
         playIcon.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 playIcon.setLayoutParams(miss);
                 pauseIcon.setLayoutParams(show);
                 //根据seekBar位置判断是继续还是重新开始
-                //if (seekBar.getProgress()>20 && seekBar.getProgress()+200<seekBar.getMax()){
                 if ( mi.getCurrentPosition()>0 && !(seekBar.getProgress()==seekBar.getMax()) ) {
                     Log.d(TAG,"当前播放位置为"+ mi.getCurrentPosition() +",继续播放");
                     continuePlay();
@@ -207,7 +216,7 @@ public class MediaPlayActivity extends Activity {
                     pause();
                     Log.d(TAG,"已暂停暂停播放录音");
                 }
-                AlertDialog.Builder builder = new AlertDialog.Builder(MediaPlayActivity.this);
+                AlertDialog.Builder builder = new AlertDialog.Builder(MediaPlayActivity.this,R.style.MyDialogAlert);
                 //设置对话框图标，可以使用自己的图片，Android本身也提供了一些图标供我们使用
                 //builder.setIcon(android.R.drawable.ic_dialog_alert);
                 //设置对话框标题
@@ -221,20 +230,13 @@ public class MediaPlayActivity extends Activity {
                         // 执行点击确定按钮的业务逻辑
                         if(recorderInfo != null) {
                             try {
-                                //getDao().deleteByKey(recorderInfo.getId());//删除数据库对象
-                                //Log.d(TAG,"删除数据库对象");
-                                if (removeAudioFile(recorderInfo.getFilepath()))//删除文件
-                                {
-                                    Toast.makeText(getApplicationContext(), "删除文件成功", Toast.LENGTH_SHORT).show();
-                                } else {
-                                    Toast.makeText(getApplicationContext(), "删除文件失败", Toast.LENGTH_SHORT).show();
-                                }
+                                dialog.dismiss();
+                                //传递RecorderInfo对象给RecorderActivity用于删除数据对象以便更新列表
                                 Intent intent = new Intent(MediaPlayActivity.this, RecorderActivity.class);
                                 Log.d(TAG,"放入的文件名为"+recorderInfo.getFilepath());
-                                intent.putExtra("fileName",recorderInfo.getFilepath());
-                                dialog.dismiss();
+                                intent.putExtra("recorder",recorderInfo);
                                 startActivity(intent);
-                                //MediaPlayActivity.this.finish();
+                                MediaPlayActivity.this.finish();
                             }
                             catch(Exception e){
                                 e.printStackTrace();
@@ -269,7 +271,6 @@ public class MediaPlayActivity extends Activity {
     }
     @Override
     public void onDestroy() {
-        //recorderInfo = null;
         super.onDestroy();
         Log.d(TAG, "MediaPlayActivity onDestroy 销毁 执行");
         exit();
@@ -278,19 +279,6 @@ public class MediaPlayActivity extends Activity {
     public void onRestart() {
         super.onRestart();
         Log.d(TAG, "MediaPlayActivity onRestart 重新打开 执行");
-        try {
-            Intent intent3 = getIntent();
-            recorderInfo = intent3.getParcelableExtra("recorder");
-            File recorderFile= new File(recorderInfo.getFilepath());
-
-            if (!recorderFile.exists()){
-                Intent intent = new Intent(MediaPlayActivity.this, RecorderActivity.class);
-                Log.d(TAG,"录音文件为空,返回录音界面");
-                startActivity(intent);
-            }
-        }catch(Exception e){
-            e.printStackTrace();
-        }
     }
     private void setStatusColor() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
@@ -308,16 +296,55 @@ public class MediaPlayActivity extends Activity {
                     View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         }
     }
+    //初始化最近播放列表
+    private void init_play_list() {
+    //列表非空，且适配器为空才初始化
+        if (recentPlayListView != null && playListAdapter == null){
+            LayoutInflater inflater = getLayoutInflater();
+            //init_playRecent_data();
+            Log.d(TAG,"对象的名称为"+recorderInfo.getName());
+            if (recentPlayData == null) {
+                recentPlayData = new ArrayList<>();
+                Log.d(TAG, "初始化列表数据");
+                //按照插入时间倒序排序，也就是说时间晚的会在前面显示
+                recentPlayData = getDao().queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list();
+                //recentPlayData.add(0,recorderInfo);
+            }
+            Log.d(TAG,"绑定适配器数据");
+            playListAdapter = new PlayListAdapter(inflater, recentPlayData);
+            Log.d(TAG,"列表绑定适配器");
+            recentPlayListView.setAdapter(playListAdapter);
+            //单击监听
+            recentPlayListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                @Override
+                public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                    RecorderInfo recorderObject = recentPlayData.get(position);
+                    File audioFile = new File(recorderObject.getFilepath());
+                    if (audioFile.exists()) {
+                        //playMusic(audioFile);
+                        Log.d(TAG,"要开始播放了");
+                        filePath = recorderObject.getFilepath();
+                        mi.play(filePath);
+                        pauseIcon.setLayoutParams(show);
+                        playIcon.setLayoutParams(miss);
+                        tx_maxTime.setText(recorderObject.getOften());
+                    } else {
+                        Toast.makeText(getBaseContext(), "录音文件不存在", Toast.LENGTH_SHORT).show();
+                        if (recorderObject.getId() != null) {
+                            getDao().deleteByKey(recorderObject.getId());//删除数据库对象
+                            recentPlayData.remove(recorderObject);
+                            playListAdapter.notifyDataSetChanged();
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     /*通过 Recorderapplication 类提供的 getDaoSession() 获取具体 Dao*/
     private RecorderInfoDao getDao() {
         return ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
     }
-    //删除文件
-    private boolean removeAudioFile(String Filename) {
-        File AudioFile = new File(Filename);
-        return AudioFile.delete();
-    };
-
     class MyServiceConn implements ServiceConnection{
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -344,5 +371,4 @@ public class MediaPlayActivity extends Activity {
         unbindService(conn);  //解绑
         stopService(intent);  //停止
     }
-
 }

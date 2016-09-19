@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
         android:name=".Recorderapplication"
@@ -14,10 +16,10 @@
         android:theme="@style/AppTheme">
         <activity
             android:name=".RecorderActivity"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -32,12 +34,8 @@
         <activity
             android:name=".MediaPlayActivity"
             android:label="@string/title_activity_media_play"
-            android:parentActivityName=".RecorderActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Transparent">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value="com.magicrecoder.recoderapp.RecorderActivity" />
         </activity>
         <service android:name="com.magicrecoder.recoderapp.AudioService" >
         </service>
