@@ -50,6 +50,7 @@ public class AudioPlayActivity extends Activity {
     private MyServiceConn conn;
     private Intent intent;
 
+    private RecorderInfoDao recorderInfoDao;
     private RecorderInfo recorderInfo;
     private String filePath;
     private static String durationTime;
@@ -62,6 +63,7 @@ public class AudioPlayActivity extends Activity {
     private ImageView delAudio;
     private ImageView shareAudio;
     private ImageView shareToFriend;
+    private ImageView recorder_star;
 
     private LinearLayout.LayoutParams miss = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,0);
     private LinearLayout.LayoutParams show = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1);
@@ -109,13 +111,6 @@ public class AudioPlayActivity extends Activity {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "AudioPlayActivity onCreate 创建 执行");
         setContentView(R.layout.activity_media_play);
-
-        // 通过WXAPIFactory工厂，获取IWXAPI的实例
-        //api = WXAPIFactory.createWXAPI(this, WX_APP_ID, false);
-        // 将该app注册到微信
-        //api.registerApp(WX_APP_ID);
-
-        //recentPlayListView = (ListView) findViewById(R.id.recent_play_list) ;
         setStatusColor();
         seekBar = (SeekBar) findViewById(R.id.seedBar);
         try {
@@ -130,6 +125,7 @@ public class AudioPlayActivity extends Activity {
         filePath = recorderInfo.getFilepath();
         durationTime = recorderInfo.getOften();
         Log.d(TAG,"启动播放界面,录音文件路径为"+filePath+"时常为"+durationTime);
+
 
         tx_currentTime = (TextView) findViewById(R.id.tx_currentTime);
         tx_currentTime.setText("00:00");
@@ -148,6 +144,7 @@ public class AudioPlayActivity extends Activity {
         tx_play_recorder_name.setText(recorderInfo.getName());
         tx_play_recorder_author.setText(recorderInfo.getCreate_user());
         image_chevron_left = (ImageView) findViewById(R.id.image_chevron_left);
+        recorder_star = (ImageView) findViewById(R.id.image_recorder_star);
 
         intent= new Intent(this,AudioService.class);
         startService(intent);
@@ -163,6 +160,13 @@ public class AudioPlayActivity extends Activity {
     public  void onResume() {
         super.onResume();
         //init_play_list();
+        recorderInfoDao = ((Recorderapplication) getApplicationContext()).recorderinfoDao;
+        String Tag = recorderInfoDao.load(recorderInfo.getId()).getTag();
+        Log.d(TAG,Tag);
+        if(Tag.equals("1")){
+            recorder_star.setImageResource(R.drawable.ic_grade_red_24dp);
+            recorder_star.setTag(R.drawable.ic_grade_red_24dp);
+        }
         Log.d(TAG, "AudioPlayActivity onResume 获取焦点 执行");
         playIcon.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -194,8 +198,8 @@ public class AudioPlayActivity extends Activity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if(fromUser){
-                    Log.d(TAG,"来自用户的操作seekBar");
-                    mi.seekTo(progress);
+/*                    Log.d(TAG,"来自用户的操作seekBar");
+                    mi.seekTo(progress);*/
                 }
                 else{
                 }
@@ -206,7 +210,7 @@ public class AudioPlayActivity extends Activity {
             }
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-
+                mi.seekTo(seekBar.getProgress());
             }
         });
         backToRecorder.setOnClickListener(new View.OnClickListener() {
@@ -221,6 +225,29 @@ public class AudioPlayActivity extends Activity {
                 AudioPlayActivity.this.finish();//这个是关键
             }
         });
+        recorder_star.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Integer integer = (Integer) recorder_star.getTag();
+                integer = integer == null ? 0 : integer;
+                switch (integer) {
+                    default:
+                    case R.drawable.ic_grade_white_24dp:
+                        recorder_star.setTag(R.drawable.ic_grade_red_24dp);
+                        recorder_star.setImageResource(R.drawable.ic_grade_red_24dp);
+                        recorderInfo.setTag("1");
+                        recorderInfoDao.update(recorderInfo);
+                        break;
+                    case R.drawable.ic_grade_red_24dp:
+                        recorder_star.setTag(R.drawable.ic_grade_white_24dp);
+                        recorder_star.setImageResource(R.drawable.ic_grade_white_24dp);
+                        recorderInfo.setTag("0");
+                        recorderInfoDao.update(recorderInfo);
+                        break;
+                }
+            }
+        });
+
         delAudio.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

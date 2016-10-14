@@ -699,7 +699,7 @@ public class RecorderActivity extends AppCompatActivity {
                             DateFormat format = new SimpleDateFormat("MM月dd日",Locale.getDefault());
                             String create_time=format.format(create_date);
                             String create_user="诗宁";
-                            String tag="默认";
+                            String tag="0";
                             int action=R.drawable.ic_expand_more_grep_24dp;
                             RecorderInfo recorderInfo=new RecorderInfo(null,amrFile.getPath(),icon,name,often,info,create_time,create_user,tag,action);
                             Log.d(TAG,"添加录音对象");
@@ -951,7 +951,7 @@ public class RecorderActivity extends AppCompatActivity {
             DateFormat format = new SimpleDateFormat("MM月dd日",Locale.getDefault());
             String create_time=format.format(create_date);
             String create_user="诗宁";
-            String tag="默认";
+            String tag="0";
             int action=R.drawable.ic_expand_more_grep_24dp;
             AddObject=new RecorderInfo(null,filepath,icon,name,often,info,create_time,create_user,tag,action);
             recorderInfoDao.insert(AddObject);
