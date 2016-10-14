@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:divider="@drawable/shapeline"
+    android:divider="@drawable/main_shapeline"
     android:showDividers="middle"
     tools:context="com.magicrecoder.recoderapp.RecorderActivity">
     <android.support.v7.widget.Toolbar
@@ -50,7 +50,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:id="@+id/save_record"
+            android:id="@+id/reset_record"
             android:layout_gravity="center_horizontal"
             android:padding="24dp" />
         <ImageView
@@ -64,8 +64,9 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:id="@+id/Broadcast_record"
-            android:layout_gravity="center_horizontal" />
+            android:id="@+id/pause_record"
+            android:layout_gravity="center_horizontal"
+            android:padding="24dp" />
     </LinearLayout>
 </LinearLayout>
 

@@ -8,6 +8,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.PowerManager;
 import android.util.Log;
 
 import java.util.Timer;
@@ -21,8 +22,8 @@ public class AudioService extends Service {
     private AudioManager mAm;
     MediaPlayer player;
     private Timer timer;
-    private int temp = 1;//判断是否发消息给主线程更新seekBar
-    private int isPlay = 1;//判断播放是否已发送结束信息给主线程
+    private int isPlaying = 1;//判断是否正在播放中
+    private int isPlayComplete = 1;//判断播放是否结束
     @Override
     public IBinder onBind(Intent intent) {
         Log.d(TAG,"返回接口类AudioController对象");
@@ -34,6 +35,14 @@ public class AudioService extends Service {
         Log.d(TAG,"启动音乐播放服务");
         player = new MediaPlayer();
         mAm = (AudioManager) getSystemService(AUDIO_SERVICE);
+        player.setWakeMode(getApplicationContext(), PowerManager.PARTIAL_WAKE_LOCK);
+        player.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mp) {
+                Log.d(TAG,"播放结束");
+                isPlayComplete = 0;
+            }
+        });
     }
     @Override
     public void onDestroy() {
@@ -111,7 +120,6 @@ public class AudioService extends Service {
     public void play(String filePath) {
         //重置
         player.reset();
-        Log.d(TAG,"获取会话ID"+player.getAudioSessionId());
         Log.d(TAG,"录音路径为"+filePath);
         if (requestFocus()) {
             try {
@@ -127,10 +135,13 @@ public class AudioService extends Service {
                     //prepare()方法准备完毕时，此方法调用
                     @Override
                     public void onPrepared(MediaPlayer mp) {
-                        player.setOnCompletionListener(completionListener);
                         player.start();
-                        temp = 1;
-                        isPlay = 1;
+                        Log.d(TAG, "开始播放中");
+                        isPlaying = 1;
+                        isPlayComplete = 1;
+                        if (timer != null){
+                            timer = null;
+                        }
                         addTimer();
                     }
                 });
@@ -141,73 +152,78 @@ public class AudioService extends Service {
     }
     //继续播放
     public void continuePlay() {
-        temp = 1;
-        isPlay = 1;
         player.start();
+        Log.d(TAG, "继续播放中");
+        isPlaying = 1;
+        isPlayComplete = 1;
+        if (timer != null){
+            timer = null;
+        }
+        addTimer();
     }
     //暂停播放
     public void pause(){
-        temp = 0;
-        isPlay = 0;
         player.pause();
     }
     //放弃播放
     public void stop() {
         if (player != null) {
-            temp = 0;
-            isPlay = 0;
             player.stop();
         }
     }
     //更新进度条
     public void seekTo(int progress){
-        //temp = 1;
+        //isPlaying = 1;
         //isPlay = 1;
         player.seekTo(progress);
     }
     public void addTimer(){
         if(timer == null) {
-            Log.d(TAG,"创建timer对象");
+            Log.d(TAG, "创建timer对象");
             timer = new Timer();//timer就是开启子线程执行任务，与纯粹的子线城不同的是可以控制子线城执行的时间，
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    //获取歌曲总时长
-                    int duration = player.getDuration();
-                    //获取歌曲当前播放进度
-                    int currentPosition = player.getCurrentPosition();
-                    if (temp != 0) {
-                        Message msg = MediaPlayActivity.handler.obtainMessage();
-                        //把进度封装至消息对象中
-                        Bundle bundle = new Bundle();
-                        bundle.putInt("duration", duration);
-                        bundle.putInt("currentPosition", currentPosition);
-                        bundle.putBoolean("isPlaying", true);
-                        msg.setData(bundle);
-                        MediaPlayActivity.handler.sendMessage(msg);
-                        //Log.d(TAG, "播放进行中,发送音乐位置消息给主线程");
-                        if (!player.isPlaying()) {
-                            temp = 0;
-                        }
-                    } else {
-                        if (isPlay == 1) {
-                            Message msg2 = MediaPlayActivity.handler.obtainMessage();
-                            Bundle bundle2 = new Bundle();
-                            bundle2.putInt("duration", duration);
-                            bundle2.putInt("currentPosition", currentPosition);
-                            bundle2.putBoolean("isPlaying", false);
-                            msg2.setData(bundle2);
-                            MediaPlayActivity.handler.sendMessage(msg2);
-                            Log.d(TAG, "发送消息给主线程,播放已结束");
-                            isPlay = 0;
-                            Log.d(TAG, "结束TimeTask");
-                            //timer.cancel();
-                        }
+        }
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                Log.d(TAG, "TimeTask正在运行");
+                //获取歌曲总时长
+                int duration = player.getDuration();
+                //获取歌曲当前播放进度
+                int currentPosition = player.getCurrentPosition();
+                if (isPlaying != 0) {
+                    Message msg = AudioPlayActivity.handler.obtainMessage();
+                    //把进度封装至消息对象中
+                    Bundle bundle = new Bundle();
+                    bundle.putInt("duration", duration);
+                    bundle.putInt("currentPosition", currentPosition);
+                    bundle.putBoolean("isPlaying", true);
+                    msg.setData(bundle);
+                    AudioPlayActivity.handler.sendMessage(msg);
+                    //Log.d(TAG, "播放进行中,发送音乐位置消息给主线程");
+                    if (!player.isPlaying()) {
+                        isPlaying = 0;
                     }
                 }
-                //开始计时任务后的5毫秒后第一次执行run方法，以后每500毫秒执行一次
-            }, 5, 200);
-        }
+                else {
+                    Message msg2 = AudioPlayActivity.handler.obtainMessage();
+                    Bundle bundle2 = new Bundle();
+                    bundle2.putInt("duration", duration);
+                    bundle2.putInt("currentPosition", currentPosition);
+                    if (isPlayComplete == 0) {
+                        bundle2.putBoolean("isPlaying", false);
+                    }
+                    else{
+                        bundle2.putBoolean("isPlaying", true);
+                    }
+                    msg2.setData(bundle2);
+                    AudioPlayActivity.handler.sendMessage(msg2);
+                    Log.d(TAG, "发送消息给主线程,播放已结束");
+                    Log.d(TAG, "结束TimeTask");
+                    timer.cancel();
+                }
+            }
+            //开始计时任务后的5毫秒后第一次执行run方法，以后每500毫秒执行一次
+        }, 100, 500);
     }
     //获取播放状态
     public boolean isPlaying () {

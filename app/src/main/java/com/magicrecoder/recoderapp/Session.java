@@ -1,9 +1,12 @@
 package com.magicrecoder.recoderapp;
 
 import android.content.Context;
+import android.os.Environment;
 
 import com.magicrecoder.greendao.DaoMaster;
 import com.magicrecoder.greendao.DaoSession;
+
+import java.io.File;
 
 /**
  * Created by Administrator on 2016-09-05.
@@ -11,7 +14,7 @@ import com.magicrecoder.greendao.DaoSession;
 public class Session {
     private static DaoMaster daoMaster;
     private static DaoSession daoSession;
-    private final static String DB_NAME = "Recorder_db";
+    private final static String DB_NAME = Environment.getExternalStorageDirectory()+"/RecorderInfo/recorder_db";
     private Session() {
     }
     /**
@@ -20,6 +23,10 @@ public class Session {
      */
     public static void init(Context context){
         if (daoMaster == null) {
+            File DBPath = new File(Environment.getExternalStorageDirectory(), "/RecorderInfo");
+            if (!DBPath.exists()) {
+                DBPath.getParentFile().mkdirs();
+            }
             DaoMaster.OpenHelper helper;
             helper = new DaoMaster.DevOpenHelper(context,
                     DB_NAME, null);

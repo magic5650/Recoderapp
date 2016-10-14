@@ -10,35 +10,41 @@
         android:layout_height="fill_parent"
         android:visibility="gone" />
     <ImageView android:id="@+id/icon"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
+        android:contentDescription="@string/recorder_icon"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:adjustViewBounds="true"
-        android:layout_gravity="center|start"
+        android:layout_gravity="center_vertical|start"
         android:gravity="center"
-        android:padding="8dp"/>
+        android:padding="4dp"/>
     <LinearLayout
         android:layout_width="0dp"
-        android:layout_height="72dp"
+        android:layout_height="56dp"
         android:layout_weight="1"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
         android:orientation="vertical">
         <LinearLayout
             android:layout_width="fill_parent"
-            android:layout_height="48dp"
+            android:layout_height="32dp"
             android:orientation="horizontal">
             <TextView android:id="@+id/name"
                 android:layout_width="0dp"
                 android:layout_height="fill_parent"
                 android:layout_weight="1"
-                android:gravity="start|center_vertical"
-                android:textColor="@color/text_color"
-                android:textSize="24sp" />
+                android:layout_marginEnd="16dp"
+                android:layout_gravity="start"
+                android:gravity="bottom|start"
+                android:textAppearance="?android:attr/textAppearanceLarge"
+                android:ellipsize="marquee"
+                android:singleLine ="true" />
             <TextView android:id="@+id/often"
-                android:layout_width="80dp"
+                android:layout_width="wrap_content"
                 android:layout_height="fill_parent"
                 android:layout_marginEnd="16dp"
-                android:textSize="24sp"
-                android:textColor="@color/text_color"
-                android:gravity="start|center" />
+                android:layout_gravity="end"
+                android:gravity="bottom|start"
+                android:textAppearance="?android:attr/textAppearanceLarge" />
         </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
@@ -47,24 +53,28 @@
             <TextView android:id="@+id/info"
                 android:layout_width="0dp"
                 android:layout_height="fill_parent"
-                android:layout_weight="2"
-                android:textSize="12sp"
-                android:textColor="@color/color_grey_light"
-                android:gravity="top" />
+                android:layout_weight="1"
+                android:textAppearance="?android:attr/textAppearanceSmall"
+                android:layout_gravity="start"
+                android:gravity="top|start"
+                android:layout_marginEnd="16dp"
+                android:ellipsize="marquee"
+                android:singleLine ="true" />
             <TextView android:id="@+id/create_time"
-                android:layout_width="80dp"
+                android:layout_width="wrap_content"
                 android:layout_height="fill_parent"
-                android:textSize="12sp"
-                android:textColor="@color/color_grey_light"
-                android:gravity="top" />
+                android:layout_gravity="end"
+                android:gravity="top|end"
+                android:textAppearance="?android:attr/textAppearanceSmall" />
         </LinearLayout>
     </LinearLayout>
-    <ImageView android:id="@+id/action"
+    <ImageView
+        android:id="@+id/action"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:adjustViewBounds="true"
-        android:layout_gravity="center_vertical"
+        android:layout_gravity="center_vertical|end"
         android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"/>
+        android:contentDescription="@string/more_action"
+        android:padding="8dp"/>
 </LinearLayout>

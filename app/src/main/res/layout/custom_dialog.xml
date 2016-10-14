@@ -5,54 +5,45 @@
     android:background="@color/color_white"
     android:orientation="vertical"
     android:id="@+id/customDialog"
-    android:backgroundTint="@color/color_white"
     android:divider="@drawable/dialog_divider"
     android:showDividers="middle"
-    android:theme="@style/AlertDialog.AppCompat">
+    android:theme="@style/Theme.System.Alert">
     <TextView
         android:id="@+id/dialogTitle"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="64dp"
         android:background="@color/color_white"
         android:gravity="center"
-        android:textSize="24sp"
-        android:textColor="@color/text_color" />
+        android:textAppearance="?android:attr/textAppearanceLarge" />
     <EditText
         android:id="@+id/fileName"
         android:inputType="textEmailAddress"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginLeft="12dp"
-        android:layout_marginRight="12dp"
-        android:layout_marginBottom="4dp"
-        android:textSize="24sp"
-        android:textColor="@color/text_color" />
+        android:layout_height="64dp"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
     <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        android:layout_height="36dp"
         android:layout_width="match_parent"
+        android:layout_height="48dp"
         android:orientation="horizontal"
-        android:divider="@drawable/dialog_button_divider"
-        android:showDividers="middle"
-        android:layout_marginBottom="12dp"
-        android:layout_marginTop="12dp">
+        android:divider="@drawable/dialog_divider2"
+        android:showDividers="middle">
         <TextView
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
+            android:layout_gravity="center_horizontal"
             android:id="@+id/btnOK"
-            android:text="确定"
+            android:text="@string/confirm"
             android:gravity="center"
-            android:textSize="24sp"
-            android:textColor="@color/text_color" />
+            android:textAppearance="?android:attr/textAppearanceMedium" />
         <TextView
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:layout_weight="1"
+            android:layout_gravity="center_horizontal"
             android:id="@+id/btnNO"
-            android:text="取消"
+            android:text="@string/back"
             android:gravity="center"
-            android:textSize="24sp"
-            android:textColor="@color/text_color" />
+            android:textAppearance="?android:attr/textAppearanceMedium" />
     </LinearLayout>
 </LinearLayout>

@@ -45,6 +45,7 @@ public class RecorderInfo implements Parcelable {
     }
 
     protected RecorderInfo(Parcel in) {
+        id = in.readLong();
         filepath = in.readString();
         icon = in.readInt();
         name = in.readString();
@@ -62,6 +63,7 @@ public class RecorderInfo implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
+        dest.writeLong(id);
         dest.writeString(filepath);
         dest.writeInt(icon);
         dest.writeString(name);
@@ -150,5 +152,4 @@ public class RecorderInfo implements Parcelable {
     public void setAction(int action) {
         this.action = action;
     }
-
 }

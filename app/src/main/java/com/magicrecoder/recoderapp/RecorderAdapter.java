@@ -81,7 +81,7 @@ public class RecorderAdapter extends BaseAdapter {
     }
     @Override
     public View getView(int position, View convertView, ViewGroup viewGroup){
-        Log.d(TAG,"正在绘制item"+"位置为"+position);
+        //Log.d(TAG,"正在绘制item"+"位置为"+position);
         ViewHolder holder = null;
         RecorderInfo recorder = mData.get(position);
         //如果缓存convertView为空，则需要创建View

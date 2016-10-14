@@ -1,8 +1,10 @@
 package com.magicrecoder.recoderapp;
-
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.net.Uri;
@@ -15,11 +17,13 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.NotificationCompat;
 import android.support.v7.widget.PopupMenu;
 import android.support.v7.widget.Toolbar;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.ContextMenu;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -37,17 +41,21 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.magicrecoder.autoupdate.UpdateChecker;
+import com.magicrecoder.greendao.DaoSession;
 import com.magicrecoder.greendao.RecorderInfoDao;
 import com.readystatesoftware.systembartint.SystemBarTintManager;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 import java.io.FilenameFilter;
 import java.util.Locale;
@@ -61,37 +69,40 @@ public class RecorderActivity extends AppCompatActivity {
     //定义数据
     private List<RecorderInfo> recorderData;//listView数据对象
     private RecorderAdapter recorderAdapter;//适配器对象
-    private ListView recorderListView;//列表对象
-    private MediaRecorder mMediaRecorder;// MediaRecorder对象
+
+    private MediaRecorder mRecorder;//录音对象
+    private List<File> mTmpFile = new ArrayList<File>();//临时录音文件组
+    private int mSeagments =  1;//临时录音文件后缀
     private String Filename;//录音文件绝对路径
+    private RecorderInfo AddObject;//添加的录音对象
+
+    private ListView recorderListView;//列表对象
+    private ImageView begin_record;
+    private ImageView pause_record;
+    private ImageView reset_record;
     private Chronometer chronometer;//定义计时器
-    private RecorderInfoDao recorderInfoDao;//数据库连接session
-    SharedPreferences recentPlay;
+
+    long timeWhenStopped = 0;
+    private RecorderInfoDao recorderInfoDao;//数据库连接对象
+    DaoSession daoSession;//数据库连接session
+    private TelephonyManager tManager;
+    private MyListener listener;
     Intent intent;
+    static String updateUrl = "http://1.shiningrecord.applinzi.com/version.json";
 
 
-    private static class MyHandler extends Handler {
-        private final WeakReference<AppCompatActivity> mActivity;
-
-        public MyHandler(AppCompatActivity activity) {
-            mActivity = new WeakReference<AppCompatActivity>(activity);
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            AppCompatActivity activity = mActivity.get();
-            if (activity != null) {
-                // ...
-            }
-        }
-    }
-
-    private final MyHandler mHandler = new MyHandler(this) {
+    private final Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             if(msg.what==1){
                 Log.d(TAG,"接收到的信息为1，更新list");
                 init_recorder_list();
+            }
+            if(msg.what==2){
+                Log.d(TAG,"接收到合成录音成功的消息，保存信息并更新list");
+                save_record_info();
+                recorderData.add(0,AddObject);//永远在第一个，列表第一个显示
+                recorderAdapter.notifyDataSetChanged();
             }
         }
     };
@@ -112,10 +123,18 @@ public class RecorderActivity extends AppCompatActivity {
                 Log.d(TAG,"发送信息，通知UI更新");
             }
         }).start();
-
+        daoSession = ((Recorderapplication) this.getApplicationContext()).daoSession;
+        recorderInfoDao = ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
         recorderListView = (ListView) findViewById(R.id.recorder_ListView) ;
         chronometer = (Chronometer) findViewById(R.id.chronometer);
-        ClickListener();
+        begin_record = (ImageView) findViewById(R.id.begin_record);
+        pause_record =(ImageView) findViewById(R.id.pause_record);
+        reset_record =(ImageView) findViewById(R.id.reset_record);
+        //监听电话状态
+        tManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        listener = new MyListener();
+        tManager.listen(listener,PhoneStateListener.LISTEN_CALL_STATE);
+        ClickListener2();
         //setStatusColor();
         //长按菜单弹出操作，注册列表
         registerForContextMenu(recorderListView);
@@ -128,13 +147,33 @@ public class RecorderActivity extends AppCompatActivity {
         }
         Log.d(TAG, "MainActivity onCreate 创建，执行");
     }
+    private class MyListener extends PhoneStateListener {
+        @Override
+        public void onCallStateChanged(int state, String incomingNumber) {
+            try {
+                switch (state) {
+                    case TelephonyManager.CALL_STATE_IDLE://空闲状态。
+                        break;
+                    case TelephonyManager.CALL_STATE_RINGING://零响状态。
+                        //停止录音
+                        record_pause();
+                        break;
+                    case TelephonyManager.CALL_STATE_OFFHOOK://通话状态
+                        //停止录音
+                        record_continue();
+                        break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
     //launchMode为singleTask的时候，通过Intent启到一个Activity,如果系统已经存在一个实例，系统就会将请求发送到这个实例上，
     // 但这个时候，系统就不会再调用通常情况下我们处理请求数据的onCreate方法，而是调用onNewIntent方法，如下所示:
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         Log.d(TAG,"MainActivity onNewIntent 创建，执行");
-        backDelRecorder(intent);
     }
 
     @Override
@@ -147,8 +186,6 @@ public class RecorderActivity extends AppCompatActivity {
     public void onResume() {
         super.onResume();
         Log.d(TAG, "MainActivity onResume 获取焦点 执行");
-        //初始化列表
-        //init_recorder_list();
     }
 
     @Override
@@ -160,19 +197,39 @@ public class RecorderActivity extends AppCompatActivity {
     @Override
     public void onStop() {
         super.onStop();
+        Integer integer = (Integer) begin_record.getTag();
+        integer = integer == null ? 0 : integer;
+        if (integer == R.drawable.ic_pause_circle_filled_red_24dp) {
+            recordNotification();
+        }
+
         Log.d(TAG, "MainActivity onStop 不可见 执行");
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        tManager.listen(listener, PhoneStateListener.LISTEN_NONE);
+        if (mTmpFile.size()>0) {
+            for (File f : mTmpFile)
+                f.delete();
+        }
         Log.d(TAG, "MainActivity onDestroy 销毁 执行");
     }
 
     @Override
     public void onRestart() {
         super.onRestart();
-        Log.d(TAG, "MainActivity onRestart 重新打开 执行");
+        int beforeNum = recorderData.size();
+        //daoSession.clear();
+        int afterNum = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list().size();
+        Log.d(TAG,"beforeNum is "+beforeNum+"afterNum is "+afterNum);
+        if (beforeNum>afterNum) {
+            recorderData.clear();
+            recorderData.addAll(recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list());
+            recorderAdapter.notifyDataSetChanged();
+            Log.d(TAG, "MainActivity onRestart 重新打开 执行");
+        }
     }
 
     @Override
@@ -186,29 +243,6 @@ public class RecorderActivity extends AppCompatActivity {
         super.onRestoreInstanceState(saveInstanceState);
         Log.d(TAG, "MainActivity onRestoreInstanceState 保存数据");
     }
-
-/*    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if(keyCode == KeyEvent.KEYCODE_BACK) {
-            // 监控返回键
-            new AlertDialog.Builder(RecorderActivity.this).setTitle("提示")
-                    .setIconAttribute(android.R.attr.alertDialogIcon)
-                    .setMessage("确定要退出吗?")
-                    .setPositiveButton("确认", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialog, int which) {
-                            RecorderActivity.this.finish();
-                        }})
-                    .setNegativeButton("取消", null)
-                    .create().show();
-            return false;
-        } else if(keyCode == KeyEvent.KEYCODE_MENU) {
-            // 监控菜单键
-            Toast.makeText(RecorderActivity.this, "Menu", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-        return super.onKeyDown(keyCode, event);
-    }*/
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -228,6 +262,8 @@ public class RecorderActivity extends AppCompatActivity {
                 case R.id.search_bar:
                     Log.d(TAG, "搜索");
                     return true;
+                case R.id.menu_more:
+                    return true;
                 case R.id.menu_help:
                     Log.d(TAG, "帮助");
                     final AlertDialog helpDialog = new AlertDialog.Builder(RecorderActivity.this).create();
@@ -246,6 +282,11 @@ public class RecorderActivity extends AppCompatActivity {
                     return true;
                 case R.id.menu_update:
                     Log.d(TAG, "软件更新");
+                    UpdateChecker.checkForDialog(RecorderActivity.this);
+                    return true;
+                case R.id.menu_import_his_recorder:
+                    Log.d(TAG, "加载历史文件");
+                    import_history_recorder();
                     return true;
             }
             return false;
@@ -275,7 +316,6 @@ public class RecorderActivity extends AppCompatActivity {
     private void initRecorderData() {
         if (recorderData == null) {
             recorderData = new ArrayList<>();
-            recorderInfoDao = ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
             Log.d(TAG, "初始化数据库连接");
             //按照插入时间倒序排序，也就是说时间晚的会在前面显示
             recorderData = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list();
@@ -296,12 +336,15 @@ public class RecorderActivity extends AppCompatActivity {
             recorderListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                    Integer integer = (Integer) begin_record.getTag();
+                    integer = integer == null ? 0 : integer;
+                    if (integer == R.drawable.ic_pause_circle_filled_red_24dp) {
+                        record_stop();
+                    }
                     RecorderInfo recorderObject = recorderData.get(position);
                     File audioFile = new File(recorderObject.getFilepath());
                     if (audioFile.exists()) {
-                        //playMusic(audioFile);
                         Log.d(TAG,"要开始播放了");
-                        storeRecentPlay(recorderObject);
                         playAudio(recorderObject);
                     } else {
                         Toast.makeText(getBaseContext(), "录音文件不存在", Toast.LENGTH_SHORT).show();
@@ -324,6 +367,7 @@ public class RecorderActivity extends AppCompatActivity {
                     final TextView dialogTitle = (TextView) dialogView.findViewById(R.id.dialogTitle);
                     final TextView mBtnOK = (TextView) dialogView.findViewById(R.id.btnOK);
                     final TextView mBtnNO = (TextView) dialogView.findViewById(R.id.btnNO);
+
                     PopupMenu actionMenu = new PopupMenu(RecorderActivity.this, v);
                     getMenuInflater().inflate(R.menu.recorder_menu, actionMenu.getMenu());
                     actionMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
@@ -340,9 +384,9 @@ public class RecorderActivity extends AppCompatActivity {
                                     }
                                     if (removeAudioFile(recorderObject.getFilepath()))//删除文件
                                     {
-                                        Toast.makeText(getApplicationContext(), "删除文件成功", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(getBaseContext(), "删除文件成功", Toast.LENGTH_SHORT).show();
                                     } else {
-                                        Toast.makeText(getApplicationContext(), "删除文件失败", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(getBaseContext(), "删除文件失败", Toast.LENGTH_SHORT).show();
                                     }
                                     return true;
                                 case R.id.modifyName:
@@ -359,7 +403,7 @@ public class RecorderActivity extends AppCompatActivity {
                                             InputMethodManager inputManager = (InputMethodManager) editText.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
                                             inputManager.showSoftInput(editText, 0);
                                         }
-                                    }, 500);
+                                    }, 200);
                                     mBtnOK.setOnClickListener(new View.OnClickListener() {
                                         @Override
                                         public void onClick(View v) {
@@ -410,7 +454,7 @@ public class RecorderActivity extends AppCompatActivity {
                                             InputMethodManager inputManager = (InputMethodManager) editText.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
                                             inputManager.showSoftInput(editText, 0);
                                         }
-                                    }, 500);
+                                    }, 200);
                                     mBtnOK.setOnClickListener(new View.OnClickListener() {
                                         @Override
                                         public void onClick(View v) {
@@ -448,42 +492,54 @@ public class RecorderActivity extends AppCompatActivity {
             Log.d(TAG,"recorderAdapter非空,无需更新");
         }
     }
-    //删除从MediaPlayActivity返回的对象
-    private void backDelRecorder(Intent intent) {
-        setIntent(intent);
-        try {
-            Intent intent2 = getIntent();
-            RecorderInfo delObject = intent2.getParcelableExtra("recorder");
-            Log.d(TAG,"尝试接收序列化的RecorderInfo对象");
-            if (delObject != null){
-                Log.d(TAG,"接收的recorder对象非空");
-                Log.d(TAG,"删除前,recorderData数组中录音对象个数为"+recorderData.size());
-                Iterator<RecorderInfo> iterator = recorderData.iterator();
-                while(iterator.hasNext()){
-                    RecorderInfo i = iterator.next();
-                    if(i.getName().equals(delObject.getName())){
-                        iterator.remove();
-                        Log.d(TAG, "删除recorderData中播放器回传回来的录音对象");
-                        recorderInfoDao.deleteByKey(i.getId());//删除数据库对象
-                        if (removeAudioFile(i.getFilepath()))//删除文件
-                        {
-                            Toast.makeText(getApplicationContext(), "删除成功", Toast.LENGTH_SHORT).show();
-                        } else {
-                            Toast.makeText(getApplicationContext(), "删除失败", Toast.LENGTH_SHORT).show();
-                        }
-                    }
+
+    /* 按钮监听*/
+    private void ClickListener2() {
+        assert begin_record != null;
+        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
+        begin_record.setOnClickListener(new ImageView.OnClickListener() {
+            @Override
+            public void onClick(View arg0) {
+                Integer integer = (Integer) begin_record.getTag();
+                integer = integer == null ? 0 : integer;
+                switch (integer) {
+                    default:
+                    case R.drawable.ic_radio_button_checked_red_24dp:
+                        record_start();
+                        break;
+                    case R.drawable.ic_pause_circle_filled_red_24dp:
+                        record_stop();
+                        break;
                 }
-                Log.d(TAG,"删除后,recorderData数组中录音对象个数为"+recorderData.size());
-                recorderAdapter.notifyDataSetChanged();
-                Log.d(TAG, "通知适配器更新");
             }
-            else {
-                Log.d(TAG, "返回的recorder对象为空");
+        });
+        pause_record.setVisibility(View.INVISIBLE);
+        pause_record.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Integer integer = (Integer) pause_record.getTag();
+                integer = integer == null ? 0 : integer;
+                switch (integer) {
+                    default:
+                    case R.drawable.ic_pause_red_24dp:
+                        record_pause();
+                        break;
+                    case R.drawable.ic_continue_red_24dp:
+                        record_continue();
+                        break;
+                }
             }
-        }catch(Exception e){
-            e.printStackTrace();
-        }
+        });
+        reset_record.setVisibility(View.INVISIBLE);
+        reset_record.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                reset_record();
+            }
+        });
+
     }
+
     //长按列表弹出操作
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
@@ -595,222 +651,12 @@ public class RecorderActivity extends AppCompatActivity {
         }
     }
 
-    /*按钮监听*/
-    private void ClickListener() {
-        final ImageView begin_record = (ImageView) findViewById(R.id.begin_record);
-        final ImageView save_record = (ImageView) findViewById(R.id.save_record);
-        assert begin_record != null;
-        assert save_record != null;
-        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
-        begin_record.setOnClickListener(new ImageView.OnClickListener() {
-            @Override
-            public void onClick(View arg0) {
-                Integer integer = (Integer) begin_record.getTag();
-                integer = integer == null ? 0 : integer;
-                switch (integer) {
-                    default:
-                    case R.drawable.ic_radio_button_checked_red_24dp:
-                        begin_record.setImageResource(R.drawable.ic_pause_circle_filled_red_24dp);
-                        begin_record.setTag(R.drawable.ic_pause_circle_filled_red_24dp);
-                        //save_record.setImageResource(0);
-                        int color = ContextCompat.getColor(getBaseContext(), R.color.color_black);
-                        chronometer.setTextColor(color);
-
-                        start_record();
-                        Log.d(TAG, "开始录音");
-                        break;
-                    case R.drawable.ic_pause_circle_filled_red_24dp:
-                        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
-                        begin_record.setTag(R.drawable.ic_radio_button_checked_red_24dp);
-                        //save_record.setImageResource(R.drawable.ic_save_nactive_24dp);
-                        Log.d(TAG, "暂停录音" + integer);
-                        int color2 = ContextCompat.getColor(getBaseContext(), R.color.color_grey);
-                        chronometer.setTextColor(color2);
-                        stop_record();
-                        break;
-                }
-            }
-        });
-        save_record.setOnClickListener(new ImageView.OnClickListener() {
-            @Override
-            public void onClick(View arg0) {
-                if (save_record.getDrawable() == null) {
-                    Log.d(TAG, "保存图片为空");
-                } else {
-                    Log.d(TAG, "点击保存录音");
-                    begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
-                    save_record.setImageResource(0);
-                }
-            }
-        });
-    }
-
-    /*录音文件默认保存格式*/
-    private static SimpleDateFormat time_format = new SimpleDateFormat("HHmmss", Locale.getDefault());//24小时制
-
-    /*开始录音*/
-    private void start_record() {
-        File dir = getRecordDir();
-        if (dir == null) {
-            Log.d(TAG, "目录为空");
-            return;
-        }
-        Filename = time_format.format(new Date()) + ".amr";
-        Log.d(TAG, Filename);
-        File AudioFile = new File(dir, Filename);
-        Log.d(TAG, AudioFile.getPath());
-        try {
-            mMediaRecorder = new MediaRecorder();
-            mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT);
-            mMediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT);
-            mMediaRecorder.setOutputFile(AudioFile.getPath());
-            mMediaRecorder.prepare();
-            mMediaRecorder.start();
-            chronometer.setFormat(null);
-            chronometer.setBase(SystemClock.elapsedRealtime());
-            chronometer.start();
-            Log.d(TAG, "record begin");
-        } catch (Exception e) {
-            Log.d(TAG, e.toString());
-        }
-    }
-
-    /*结束录音*/
-    private void stop_record() {
-        if (mMediaRecorder != null) {
-            mMediaRecorder.stop();
-            mMediaRecorder.release();
-            Log.d(TAG, "释放录音资源");
-            mMediaRecorder = null;
-            chronometer.stop();
-            chronometer.setBase(SystemClock.elapsedRealtime());
-            if (recorderListView != null) {
-                File dir = getRecordDir();
-                File File = new File(dir, Filename);
-                String filepath=File.getPath();
-                Log.d(TAG, "文件绝对路径"+filepath);
-                int icon=R.drawable.ic_play_circle_filled_red_48dp;
-                String name="录音"+Filename.substring(0,Filename.lastIndexOf("."));
-                String often=GetFilePlayTime(File);
-                String info="添加备注";
-                Date create_date=new Date(File.lastModified());
-                DateFormat format = new SimpleDateFormat("MM月dd日",Locale.getDefault());
-                String create_time=format.format(create_date);
-                String create_user="诗宁";
-                String tag="默认";
-                int action=R.drawable.ic_more_vert_grey_24dp;
-                RecorderInfo recorderInfo=new RecorderInfo(null,filepath,icon,name,often,info,create_time,create_user,tag,action);
-                recorderInfoDao.insert(recorderInfo);
-                recorderData.add(0,recorderInfo);//永远在第一个，列表第一个显示
-                recorderAdapter.notifyDataSetChanged();
-            }
-        }
-    }
-
-    /*获取录音时常*/
-    private String GetFilePlayTime(File file) {
-        Date date;
-        Date oneHour;
-        SimpleDateFormat sy1,sy2;
-        String dateFormat = "error";
-
-        try {
-            sy1 = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());//设置为时分秒的格式
-            sy2 = new SimpleDateFormat("mm:ss", Locale.getDefault());//设置为时分秒的格式
-
-            //使用媒体库获取播放时间
-            MediaPlayer mediaPlayer;
-            mediaPlayer = MediaPlayer.create(getBaseContext(), Uri.parse(file.toString()));
-
-            //使用Date格式化播放时间mediaPlayer.getDuration()
-            date = sy1.parse("00:00:00");
-            oneHour = sy1.parse("01:00:00");
-            date.setTime(mediaPlayer.getDuration() + date.getTime());//用消除date.getTime()时区差
-            if (date.getTime()<oneHour.getTime()) {
-                dateFormat = sy2.format(date);
-            }
-            else {
-                dateFormat = sy1.format(date);
-            }
-            mediaPlayer.release();
-
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-        return dateFormat;
-    }
-
-    /*录音文件存放路径*/
-    @Nullable
-    private File getRecordDir() {
-        if (sdcardIsValid()) {
-            String path = Environment.getExternalStorageDirectory() + "/record";
-            File dir = new File(path);
-            if (!dir.exists()) {
-                dir.mkdir();
-            }
-            return dir;
-        } else {
-            return null;
-        }
-    }
-
-    /*判断是否有SD卡*/
-    private boolean sdcardIsValid() {
-        if (Environment.getExternalStorageState().equals(
-                Environment.MEDIA_MOUNTED)) {
-            return true;
-        } else {
-            Toast.makeText(getBaseContext(), "没有SD卡", Toast.LENGTH_LONG).show();
-        }
-        return false;
-    }
-
-    /* 隐式播放录音文件 */
-    private void playMusic(File file) {
-        Intent intent = new Intent();
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setAction(Intent.ACTION_VIEW);
-        /* 设置文件类型 */
-        intent.setDataAndType(Uri.fromFile(file), "audio");
-        startActivity(intent);
-    }
-
     /* 播放录音文件 */
     private void playAudio(RecorderInfo recorderObject) {
-        Intent intent = new Intent(this, MediaPlayActivity.class);
+        Intent intent = new Intent(this, AudioPlayActivity.class);
         Log.d(TAG,"放入的文件名为"+recorderObject.getFilepath());
         intent.putExtra("recorder",recorderObject);
         startActivity(intent);
-        //RecorderActivity.this.finish();
-    }
-
-    //存储播放列表
-    private void storeRecentPlay(RecorderInfo recorderObject) {
-        Log.d(TAG,"存储播放记录");
-        recentPlay = getSharedPreferences("recentPlay", MODE_PRIVATE);
-        SharedPreferences.Editor editor = recentPlay.edit();
-
-        String one = recentPlay.getString("one","");
-        Log.d(TAG,"获取到的录音名one"+one);
-        String two = recentPlay.getString("two", "");
-        Log.d(TAG,"获取到的录音名two"+two);
-        String three = recentPlay.getString("three", "");
-        Log.d(TAG,"获取到的录音名three"+three);
-        String four = recentPlay.getString("four", "");
-        Log.d(TAG,"获取到的录音名four"+four);
-        editor.putString("four","");
-        editor.putString("three","");
-        editor.putString("two","");
-        editor.putString("one",recorderObject.getName());
-        // 提交数据修改
-        editor.apply();
-    }
-
-    /*通过 Recorderapplication 类提供的 getDaoSession() 获取具体 Dao*/
-    private RecorderInfoDao getDao() {
-        return ((Recorderapplication) this.getApplicationContext()).recorderinfoDao;
     }
 
     private void updateView(int itemIndex) {
@@ -829,6 +675,371 @@ public class RecorderActivity extends AppCompatActivity {
         File AudioFile = new File(Filename);
         return AudioFile.delete();
     };
+    //导入历史录音
+    private void import_history_recorder() {
+        File dir = getRecordDir();
+        int count = 0;
+        int add = 0;
+        try {
+            String[] FileList = dir.list(new MusicFilter());
+            for (int i = 0; i < FileList.length; i++) {
+                File amrFile=new File(dir,FileList[i]);
+                Log.d(TAG,amrFile.getName());
+                if(amrFile.exists()) {
+                    java.util.Date date= new java.util.Date();
+                    Long fileTs = amrFile.lastModified();
+                    if( fileTs < date.getTime()) {
+                        count = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Filepath.eq(amrFile.getPath())).build().list().size();
+                        if (count == 0) {
+                            int icon=R.drawable.ic_play_circle_filled_red_48dp;
+                            String name=amrFile.getName().substring(0,amrFile.getName().lastIndexOf("."));
+                            String often=GetFilePlayTime(amrFile);
+                            String info="添加备注";
+                            Date create_date=new Date(amrFile.lastModified());
+                            DateFormat format = new SimpleDateFormat("MM月dd日",Locale.getDefault());
+                            String create_time=format.format(create_date);
+                            String create_user="诗宁";
+                            String tag="默认";
+                            int action=R.drawable.ic_expand_more_grep_24dp;
+                            RecorderInfo recorderInfo=new RecorderInfo(null,amrFile.getPath(),icon,name,often,info,create_time,create_user,tag,action);
+                            Log.d(TAG,"添加录音对象");
+                            recorderInfoDao.insert(recorderInfo);
+                            add = add + 1;
+                            //recorderData.add(recorderInfo);
+                        }
+                    }
+                }
+            }
+        }catch (NullPointerException e){
+            e.printStackTrace();
+        }
+        //recorderAdapter.notifyDataSetChanged();
+        //daoSession.clear();
+        if (add > 0) {
+            recorderData.clear();
+            recorderData.addAll(recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Id.notEq(-1)).orderDesc(RecorderInfoDao.Properties.Id).build().list());
+            recorderAdapter.notifyDataSetChanged();
+        }
+        Toast.makeText(getBaseContext(),"导入历史录音"+add+"条",Toast.LENGTH_SHORT).show();
+    }
+
+    /*开播录音*/
+    private void record_start() {
+        begin_record.setImageResource(R.drawable.ic_pause_circle_filled_red_24dp);
+        begin_record.setTag(R.drawable.ic_pause_circle_filled_red_24dp);
+
+        pause_record.setImageResource(R.drawable.ic_pause_red_24dp);
+        pause_record.setTag(R.drawable.ic_pause_red_24dp);
+        pause_record.setVisibility(View.VISIBLE);
+
+        reset_record.setImageResource(R.drawable.ic_reset_red_24dp);
+        reset_record.setVisibility(View.VISIBLE);
+
+        int color = ContextCompat.getColor(getBaseContext(), R.color.color_black);
+        chronometer.setTextColor(color);
+        chronometer.setFormat(null);
+        chronometer.setBase(SystemClock.elapsedRealtime());
+        chronometer.start();
+
+
+        Filename = "录音"+ time_format.format(new Date());
+        startRecording();
+        Log.d(TAG,"开始录音");
+    }
+    //暂停录音
+    private void record_pause() {
+        pause_record.setImageResource(R.drawable.ic_continue_red_24dp);
+        pause_record.setTag(R.drawable.ic_continue_red_24dp);
+        pause_record.setVisibility(View.VISIBLE);
+
+        int color2 = ContextCompat.getColor(getBaseContext(), R.color.color_grey);
+        chronometer.setTextColor(color2);
+        timeWhenStopped = chronometer.getBase() - SystemClock.elapsedRealtime();
+        chronometer.setFormat(null);
+        chronometer.stop();
+
+        pauseRecording();
+        Log.d(TAG,"暂停录音");
+    }
+    //继续录音
+    private  void record_continue() {
+        pause_record.setImageResource(R.drawable.ic_pause_red_24dp);
+        pause_record.setTag(R.drawable.ic_pause_red_24dp);
+        pause_record.setVisibility(View.VISIBLE);
+
+        int color = ContextCompat.getColor(getBaseContext(), R.color.color_black);
+        chronometer.setTextColor(color);
+        chronometer.setFormat(null);
+        chronometer.setBase(SystemClock.elapsedRealtime() + timeWhenStopped);
+        chronometer.start();
+        Log.d(TAG,"暂停录音");
+        startRecording();
+    }
+    //结束录音
+    private void record_stop(){
+        pause_record.setVisibility(View.INVISIBLE);
+        reset_record.setVisibility(View.INVISIBLE);
+
+        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
+        begin_record.setTag(R.drawable.ic_radio_button_checked_red_24dp);
+
+        int color2 = ContextCompat.getColor(getBaseContext(), R.color.color_grey);
+
+        chronometer.setTextColor(color2);
+        chronometer.setBase(SystemClock.elapsedRealtime());
+        chronometer.stop();
+        timeWhenStopped = 0;
+        stopRecording();
+    }
+    //重置录音
+    private void reset_record() {
+        pause_record.setVisibility(View.INVISIBLE);
+        reset_record.setVisibility(View.INVISIBLE);
+
+        begin_record.setImageResource(R.drawable.ic_radio_button_checked_red_24dp);
+        begin_record.setTag(R.drawable.ic_radio_button_checked_red_24dp);
+
+        int color2 = ContextCompat.getColor(getBaseContext(), R.color.color_grey);
+        chronometer.setTextColor(color2);
+        chronometer.setBase(SystemClock.elapsedRealtime());
+        chronometer.stop();
+        timeWhenStopped = 0;
+
+        pauseRecording();
+        for (File f : mTmpFile)
+            f.delete();
+        mTmpFile.clear();
+        mSeagments = 1;
+    }
+
+    private void startRecording(){
+        Filename = "录音"+ time_format.format(new Date());
+        //File file = new File(FileUtils.getAmrFilePath(Filename)+mSeagments);
+        File file = new File(getRecordDir(),Filename+".amr"+mSeagments);
+        mTmpFile.add(file);
+        mSeagments++;
+        if(file.exists()){
+            if(file.delete())
+                try {
+                    file.createNewFile();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+        }else{
+            try {
+                file.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        mRecorder = new MediaRecorder();
+        mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        mRecorder.setOutputFormat(MediaRecorder.OutputFormat.AMR_NB);//
+        mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+        mRecorder.setOutputFile(file.getAbsolutePath());
+        mRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener(){
+            @Override
+            public void onError(MediaRecorder mr, int what, int extra) {
+                mRecorder.reset();
+            }
+        });
+        try {
+            mRecorder.prepare();
+            mRecorder.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+            mRecorder.release();
+        }finally{
+        }
+    }
+    private void pauseRecording(){
+        if(mRecorder!=null){
+            Log.d(TAG,"暂停录音");
+            mRecorder.stop();
+            mRecorder.release();
+            mRecorder = null;
+        }
+    }
+    private void stopRecording(){
+        if (mRecorder != null) {
+            mRecorder.stop();
+            mRecorder.release();
+            mRecorder = null;
+        }
+        //final File finalFile = new File(FileUtils.getAmrFilePath(Filename));
+        final File finalFile = new File(getRecordDir(),Filename+".amr");
+        if (!finalFile.exists()) {
+            try {
+                finalFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                FileOutputStream fileOutputStream = null;
+                try {
+                    fileOutputStream = new FileOutputStream(finalFile);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                for (int i = 0; i < mTmpFile.size(); i++) {
+                    File tmpFile = mTmpFile.get(i);
+                    FileInputStream fis = null;
+                    try {
+                        fis = new FileInputStream(tmpFile);
+                        byte[] tmpBytes = new byte[fis.available()];
+                        int lenght = tmpBytes.length;
+                        if (i == 0) {
+                            while (fis.read(tmpBytes) != -1) {
+                                fileOutputStream.write(tmpBytes, 0, lenght);
+                            }
+                        } else {
+                            while (fis.read(tmpBytes) != -1) {
+                                fileOutputStream.write(tmpBytes, 6, lenght - 6);
+                            }
+                        }
+                        fileOutputStream.flush();
+                        fis.close();
+                        Log.d(TAG,"共合成的录音文件为"+tmpFile.getName());
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } finally {
+                        fis = null;
+                    }
+                }
+                Log.d(TAG,"合成录音进程结束");
+                if(finalFile.exists()){
+                    Message msg =Message.obtain();
+                    msg.what=2;
+                    mHandler.sendMessage(msg);
+                }
+                try {
+                    if (fileOutputStream != null)
+                        fileOutputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } finally {
+                    fileOutputStream = null;
+                    for (File f : mTmpFile)
+                        f.delete();
+                    mTmpFile.clear();
+                    mSeagments = 1;
+                    Log.d(TAG,"合成录音进程结束，初始化参数");
+                }
+            }
+        }).start();
+    }
+
+    //保存录音信息，并刷新列表
+    private void save_record_info() {
+        if (recorderListView != null) {
+            File dir = getRecordDir();
+            String FileName=Filename + ".amr";
+            File File = new File(dir, FileName);
+            String filepath=File.getPath();
+            Log.d(TAG, "文件绝对路径"+filepath);
+            int icon=R.drawable.ic_play_circle_filled_red_48dp;
+            String name=Filename.substring(0,FileName.lastIndexOf("."));
+            String often = GetFilePlayTime(File);
+            Log.d(TAG,"录音时常为"+often);
+            String info="添加备注";
+            Date create_date=new Date(File.lastModified());
+            DateFormat format = new SimpleDateFormat("MM月dd日",Locale.getDefault());
+            String create_time=format.format(create_date);
+            String create_user="诗宁";
+            String tag="默认";
+            int action=R.drawable.ic_expand_more_grep_24dp;
+            AddObject=new RecorderInfo(null,filepath,icon,name,often,info,create_time,create_user,tag,action);
+            recorderInfoDao.insert(AddObject);
+/*            recorderData.add(0,recorderInfo);//永远在第一个，列表第一个显示
+            recorderAdapter.notifyDataSetChanged();*/
+        }
+    }
+    /*获取录音时常*/
+    private String GetFilePlayTime(File file) {
+        Date date;
+        Date oneHour;
+        SimpleDateFormat sy1,sy2;
+        String dateFormat = "error";
+        try {
+            sy1 = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());//设置为时分秒的格式
+            sy2 = new SimpleDateFormat("mm:ss", Locale.getDefault());//设置为时分秒的格式
+
+            //使用媒体库获取播放时间
+            MediaPlayer mediaPlayer;
+            mediaPlayer = MediaPlayer.create(getBaseContext(), Uri.parse(file.getPath()));
+
+            //使用Date格式化播放时间mediaPlayer.getDuration()
+            date = sy1.parse("00:00:00");
+            oneHour = sy1.parse("01:00:00");
+            date.setTime(mediaPlayer.getDuration() + date.getTime());//用消除date.getTime()时区差
+            if (date.getTime()<oneHour.getTime()) {
+                dateFormat = sy2.format(date);
+            }
+            else {
+                dateFormat = sy1.format(date);
+            }
+            mediaPlayer.release();
+
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        return dateFormat;
+    }
+    /*录音文件默认保存格式*/
+    private static SimpleDateFormat time_format = new SimpleDateFormat("HHmmss", Locale.getDefault());//24小时制
+    /*录音文件存放路径*/
+    @Nullable
+    private File getRecordDir() {
+        if (sdcardIsValid()) {
+            String path = Environment.getExternalStorageDirectory() + "/record";
+            File dir = new File(path);
+            if (!dir.exists()) {
+                dir.mkdir();
+            }
+            return dir;
+        } else {
+            return null;
+        }
+    }
+    /*判断是否有SD卡*/
+    private boolean sdcardIsValid() {
+        if (Environment.getExternalStorageState().equals(
+                Environment.MEDIA_MOUNTED)) {
+            return true;
+        } else {
+            Toast.makeText(getBaseContext(), "没有SD卡", Toast.LENGTH_LONG).show();
+        }
+        return false;
+    }
+    //通知正在录音
+    private void recordNotification() {
+        //创建大图标的Bitmap
+        Bitmap LargeBitmap = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
+        NotificationCompat.Builder mBuilder =
+                (NotificationCompat.Builder) new NotificationCompat.Builder(this)
+                        .setLargeIcon(LargeBitmap)
+                        .setSmallIcon(R.drawable.ic_pause_circle_filled_red_24dp)
+                        .setContentTitle("正在录音")
+                        .setContentText(Filename)
+                        .setAutoCancel(true);
+        Intent resultIntent = new Intent(this, RecorderActivity.class);
+        resultIntent.setAction(Intent.ACTION_MAIN);
+        resultIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+
+        PendingIntent resultPendingIntent = PendingIntent.getActivity(this, (int) SystemClock.uptimeMillis(), resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        mBuilder.setContentIntent(resultPendingIntent);
+
+        mBuilder.setFullScreenIntent(resultPendingIntent,true);
+        NotificationManager mNotificationManager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+// mId allows you to update the notification later on.
+        mNotificationManager.notify(1, mBuilder.build());
+    }
     /* 过滤文件类型 */
     class MusicFilter implements FilenameFilter {
         public boolean accept(File dir, String name) {
