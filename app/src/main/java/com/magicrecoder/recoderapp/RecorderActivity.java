@@ -24,6 +24,7 @@ import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.ContextMenu;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -89,6 +90,8 @@ public class RecorderActivity extends AppCompatActivity {
     private MyListener listener;
     Intent intent;
     static String updateUrl = "http://1.shiningrecord.applinzi.com/version.json";
+
+    private long mExitTime;//按下返回键当前时间
 
 
     private final Handler mHandler = new Handler() {
@@ -686,7 +689,7 @@ public class RecorderActivity extends AppCompatActivity {
                 File amrFile=new File(dir,FileList[i]);
                 Log.d(TAG,amrFile.getName());
                 if(amrFile.exists()) {
-                    java.util.Date date= new java.util.Date();
+                    Date date= new Date();
                     Long fileTs = amrFile.lastModified();
                     if( fileTs < date.getTime()) {
                         count = recorderInfoDao.queryBuilder().where(RecorderInfoDao.Properties.Filepath.eq(amrFile.getPath())).build().list().size();
@@ -1024,7 +1027,7 @@ public class RecorderActivity extends AppCompatActivity {
                 (NotificationCompat.Builder) new NotificationCompat.Builder(this)
                         .setLargeIcon(LargeBitmap)
                         .setSmallIcon(R.drawable.ic_pause_circle_filled_red_24dp)
-                        .setContentTitle("正在录音")
+                        .setContentTitle("正在录音,点击返回")
                         .setContentText(Filename)
                         .setAutoCancel(true);
         Intent resultIntent = new Intent(this, RecorderActivity.class);
@@ -1040,6 +1043,25 @@ public class RecorderActivity extends AppCompatActivity {
 // mId allows you to update the notification later on.
         mNotificationManager.notify(1, mBuilder.build());
     }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        Integer integer = (Integer) begin_record.getTag();
+        integer = integer == null ? 0 : integer;
+        if (keyCode == KeyEvent.KEYCODE_BACK && integer == R.drawable.ic_pause_circle_filled_red_24dp) {
+            if ((System.currentTimeMillis() - mExitTime) > 2000) {// 如果两次按键时间间隔大于2000毫秒，则不退出
+                Toast.makeText(this, "正在录音,再按一次退出", Toast.LENGTH_SHORT).show();
+                mExitTime = System.currentTimeMillis();// 更新mExitTime
+            } else {
+                reset_record();
+                finish();
+                //System.exit(0);// 否则退出程序
+            }
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
     /* 过滤文件类型 */
     class MusicFilter implements FilenameFilter {
         public boolean accept(File dir, String name) {

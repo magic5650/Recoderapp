@@ -6,17 +6,23 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.AdapterView;
@@ -43,7 +49,7 @@ import java.util.Locale;
 public class AudioPlayActivity extends Activity {
     private static final String TAG = "Lifecycle";
     public static IWXAPI api;
-    java.lang.String WX_APP_ID = "wx96692a70ef7c9064";
+    String WX_APP_ID = "wx96692a70ef7c9064";
 
     private static SeekBar seekBar;
     private AudioService.MusicInterface mi;
@@ -53,11 +59,14 @@ public class AudioPlayActivity extends Activity {
     private RecorderInfoDao recorderInfoDao;
     private RecorderInfo recorderInfo;
     private String filePath;
-    private static String durationTime;
+    private String durationTime;
+    private TextView Seekbar_slider_time;
+    private Drawable Thumb_normal;
+    private Drawable Thumb_pressed;
 
-    private  static ImageView playIcon;
-    private  static ImageView pauseIcon;
-    private  static TextView tx_currentTime;
+    private  ImageView playIcon;
+    private  ImageView pauseIcon;
+    private  TextView tx_currentTime;
     TextView tx_maxTime;
     private ImageView backToRecorder;
     private ImageView delAudio;
@@ -77,31 +86,26 @@ public class AudioPlayActivity extends Activity {
     private ListView recentPlayListView;//最近播放列表对象
 
     static Handler handler = new Handler(){//handler是谷歌说明的定义成静态的，
-        public void handleMessage(android.os.Message msg) {
-            Bundle bundle = msg.getData();
-            boolean isPlay = bundle.getBoolean("isPlaying");
-            int duration = bundle.getInt("duration");
-            int currentPosition = bundle.getInt("currentPosition");
-            //刷新进度条的进度，设置SeekBar的Max和Progress就能够时时更新SeekBar的长度，
-            if ( isPlay ) {
-                //Log.d(TAG,"正在播放,总时长为"+duration+",当前位置为"+currentPosition);
-                seekBar.setMax(duration);
-                seekBar.setProgress(currentPosition);
-                try {
-                    updateCurrentTimeText(currentPosition);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-            //根据当前位置判断录音是否结束，结束后更新UI，getCurrentPosition与duration偏移量200以内
-            else {
-                Log.d(TAG,"播放结束,当前位置为"+currentPosition+"seekBar的长度为"+duration);
-                seekBar.setProgress(duration);
-                tx_currentTime.setText(durationTime);
-                LinearLayout.LayoutParams miss = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,0);
-                pauseIcon.setLayoutParams(miss);
-                LinearLayout.LayoutParams show = new LinearLayout.LayoutParams(0,LinearLayout.LayoutParams.MATCH_PARENT,1);
-                playIcon.setLayoutParams(show);
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                default:
+                case 1:
+                    Bundle bundle = msg.getData();
+                    boolean isPlayComplete = bundle.getBoolean("isPlayComplete");
+                    int currentPosition = bundle.getInt("currentPosition");
+                    //根据当前位置判断录音是否结束，结束后更新UI
+                    if (isPlayComplete) {
+                        seekBar.setProgress(seekBar.getMax());
+                    }
+                    else {
+                        seekBar.setProgress(currentPosition);
+                    }
+                    break;
+                case 2:
+                    Bundle bundle2 = msg.getData();
+                    int duration = bundle2.getInt("duration");
+                    seekBar.setMax(duration);
+                    break;
             }
         }
     };
@@ -112,7 +116,6 @@ public class AudioPlayActivity extends Activity {
         Log.d(TAG, "AudioPlayActivity onCreate 创建 执行");
         setContentView(R.layout.activity_media_play);
         setStatusColor();
-        seekBar = (SeekBar) findViewById(R.id.seedBar);
         try {
             Intent intent2 = getIntent();
             recorderInfo = intent2.getParcelableExtra("recorder");
@@ -145,15 +148,17 @@ public class AudioPlayActivity extends Activity {
         tx_play_recorder_author.setText(recorderInfo.getCreate_user());
         image_chevron_left = (ImageView) findViewById(R.id.image_chevron_left);
         recorder_star = (ImageView) findViewById(R.id.image_recorder_star);
+        Seekbar_slider_time = (TextView) findViewById(R.id.seekbar_slider_time);
+
+        Thumb_normal = ContextCompat.getDrawable(AudioPlayActivity.this,R.drawable.slider_thumb_normal);
+        Thumb_pressed = ContextCompat.getDrawable(AudioPlayActivity.this,R.drawable.slider_thumb_pressed);
 
         intent= new Intent(this,AudioService.class);
         startService(intent);
         conn= new MyServiceConn();
         bindService(intent,conn,BIND_AUTO_CREATE);
 
-
         api= WXAPIFactory.createWXAPI(this,WX_APP_ID); //初始化api
-
         api.registerApp(WX_APP_ID); //将APP_ID注册到微信中
     }
     @Override
@@ -198,19 +203,33 @@ public class AudioPlayActivity extends Activity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if(fromUser){
-/*                    Log.d(TAG,"来自用户的操作seekBar");
-                    mi.seekTo(progress);*/
+                    Seekbar_slider_time.setText(updateCurrentTimeText(progress));
                 }
-                else{
+                tx_currentTime.setText(updateCurrentTimeText(progress));
+                if(progress == seekBar.getMax()){
+                    pauseIcon.setLayoutParams(miss);
+                    playIcon.setLayoutParams(show);
                 }
             }
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
-
+                Log.d(TAG,"onStartTrackingTouch");
+                Seekbar_slider_time.setVisibility(View.VISIBLE);
+                //设置seekbar高度，解决第一次按下后Thumb被遮盖的问题
+/*                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
+                lp.height *=4;
+                seekBar.setLayoutParams(lp);*/
+                //设置seekbarThumb相对位置可大于进度条15，保证thumb在变成40dp直径后可以滑动到进度条最末尾
+                seekBar.setThumbOffset(15);
+                seekBar.setThumb(Thumb_pressed);
             }
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
+                Log.d(TAG,"onStopTrackingTouch");
                 mi.seekTo(seekBar.getProgress());
+                seekBar.setThumbOffset(0);
+                seekBar.setThumb(Thumb_normal);
+                Seekbar_slider_time.setVisibility(View.INVISIBLE);
             }
         });
         backToRecorder.setOnClickListener(new View.OnClickListener() {
@@ -420,7 +439,6 @@ public class AudioPlayActivity extends Activity {
             mi = (AudioService.MusicInterface) service;//中间人
             Log.d(TAG,"获取到mi对象,立即播放");
             play();
-            seekBar.setProgress(0);
         }
         @Override
         public void onServiceDisconnected(ComponentName name) {
@@ -441,28 +459,31 @@ public class AudioPlayActivity extends Activity {
         unbindService(conn);  //解绑
         stopService(intent);  //停止
     }
-    public static void updateCurrentTimeText(int currentPosition){
+    public String updateCurrentTimeText(int currentPosition){
         try {
             int time= currentPosition/1000;
             if (time >= 3600) {
                 int hour = time/3600;
                 int minute = (time/60) % 60;
                 int second = time % 60;
-                String currentTime = String.format(Locale.getDefault(),"%02d:%02d:%02d", hour, minute, second);
-                tx_currentTime.setText(currentTime);
+                String Time = String.format(Locale.getDefault(),"%02d:%02d:%02d", hour, minute, second);
+                //tx_currentTime.setText(currentTime);
+                return  Time;
             }
             else{
                 int minute = time/60;
                 int second = time % 60;
-                String currentTime = String.format(Locale.getDefault(),"%02d:%02d", minute, second);
-                tx_currentTime.setText(currentTime);
+                String Time = String.format(Locale.getDefault(),"%02d:%02d", minute, second);
+                //tx_currentTime.setText(currentTime);
+                return  Time;
             }
         }
         catch (Exception e)
         {
             e.printStackTrace();
         }
-    }
+        return null;
+    };
 
     private void shareAudio(String dlgTitle, String subject, String content, Uri uri) {
         if (uri == null) {

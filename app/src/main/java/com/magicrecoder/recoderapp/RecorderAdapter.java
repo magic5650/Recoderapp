@@ -127,7 +127,7 @@ public class RecorderAdapter extends BaseAdapter {
     }
     // 1.0定义按钮接口
     public interface OnIconClickListener {
-        public void onIconClick(int position,View view);// 设置一个方法,Activity调用时可以获取按钮对象和按钮位置
+        public void onIconClick(int position, View view);// 设置一个方法,Activity调用时可以获取按钮对象和按钮位置
     }
     private OnIconClickListener ClinkListener;//2初始化监听器
     public void setIconClickListener(OnIconClickListener ClinkListener){//3提供Set方法让Activity调用
