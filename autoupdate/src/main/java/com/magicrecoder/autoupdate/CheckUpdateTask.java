@@ -52,7 +52,9 @@ class CheckUpdateTask extends AsyncTask<Void, Void, String> {
         if (dialog != null && dialog.isShowing()) {
             dialog.dismiss();
         }
-
+        if (result == null){
+            Toast.makeText(mContext, mContext.getString(R.string.android_auto_update_dialog_alarm), Toast.LENGTH_SHORT).show();
+        }
         if (!TextUtils.isEmpty(result)) {
             parseJson(result);
         }
@@ -82,7 +84,6 @@ class CheckUpdateTask extends AsyncTask<Void, Void, String> {
             Log.e(Constants.TAG, "parse json error");
         }
     }
-
 
     /**
      * Show dialog

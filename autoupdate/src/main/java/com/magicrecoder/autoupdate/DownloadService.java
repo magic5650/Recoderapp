@@ -84,11 +84,8 @@ public class DownloadService extends IntentService {
                 oldProgress = progress;
             }
             // 下载完成
-
             installAPk(apkFile);
-
             mNotifyManager.cancel(NOTIFICATION_ID);
-
         } catch (Exception e) {
             Log.d(TAG, "download apk file error");
         } finally {
