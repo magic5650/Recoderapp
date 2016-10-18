@@ -216,9 +216,9 @@ public class AudioPlayActivity extends Activity {
                 Log.d(TAG,"onStartTrackingTouch");
                 Seekbar_slider_time.setVisibility(View.VISIBLE);
                 //设置seekbar高度，解决第一次按下后Thumb被遮盖的问题
-/*                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
+                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
                 lp.height *=4;
-                seekBar.setLayoutParams(lp);*/
+                seekBar.setLayoutParams(lp);
                 //设置seekbarThumb相对位置可大于进度条15，保证thumb在变成40dp直径后可以滑动到进度条最末尾
                 seekBar.setThumbOffset(15);
                 seekBar.setThumb(Thumb_pressed);
