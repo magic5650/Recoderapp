@@ -63,6 +63,7 @@ public class AudioPlayActivity extends Activity {
     private TextView Seekbar_slider_time;
     private Drawable Thumb_normal;
     private Drawable Thumb_pressed;
+    private static boolean isUserPressThumb = false;
 
     private  ImageView playIcon;
     private  ImageView pauseIcon;
@@ -98,7 +99,7 @@ public class AudioPlayActivity extends Activity {
                         seekBar.setProgress(seekBar.getMax());
                     }
                     else {
-                        seekBar.setProgress(currentPosition);
+                        if (!isUserPressThumb) seekBar.setProgress(currentPosition);
                     }
                     break;
                 case 2:
@@ -160,6 +161,41 @@ public class AudioPlayActivity extends Activity {
 
         api= WXAPIFactory.createWXAPI(this,WX_APP_ID); //初始化api
         api.registerApp(WX_APP_ID); //将APP_ID注册到微信中
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if(fromUser){
+                    Seekbar_slider_time.setText(updateCurrentTimeText(progress));
+                }
+                tx_currentTime.setText(updateCurrentTimeText(progress));
+                if(progress == seekBar.getMax()){
+                    pauseIcon.setLayoutParams(miss);
+                    playIcon.setLayoutParams(show);
+                }
+            }
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                Log.d(TAG,"onStartTrackingTouch");
+                isUserPressThumb = true;
+                Seekbar_slider_time.setVisibility(View.VISIBLE);
+                //设置seekbar高度，解决第一次按下后Thumb被遮盖的问题
+                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
+                lp.height *=4;
+                seekBar.setLayoutParams(lp);
+                //设置seekbarThumb相对位置可大于进度条15，保证thumb在变成40dp直径后可以滑动到进度条最末尾
+                seekBar.setThumbOffset(15);
+                seekBar.setThumb(Thumb_pressed);
+            }
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                Log.d(TAG,"onStopTrackingTouch");
+                mi.seekTo(seekBar.getProgress());
+                seekBar.setThumbOffset(0);
+                seekBar.setThumb(Thumb_normal);
+                Seekbar_slider_time.setVisibility(View.INVISIBLE);
+                isUserPressThumb = false;
+            }
+        });
     }
     @Override
     public  void onResume() {
@@ -199,39 +235,7 @@ public class AudioPlayActivity extends Activity {
                 pause();
             }
         });
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if(fromUser){
-                    Seekbar_slider_time.setText(updateCurrentTimeText(progress));
-                }
-                tx_currentTime.setText(updateCurrentTimeText(progress));
-                if(progress == seekBar.getMax()){
-                    pauseIcon.setLayoutParams(miss);
-                    playIcon.setLayoutParams(show);
-                }
-            }
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                Log.d(TAG,"onStartTrackingTouch");
-                Seekbar_slider_time.setVisibility(View.VISIBLE);
-                //设置seekbar高度，解决第一次按下后Thumb被遮盖的问题
-                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
-                lp.height *=4;
-                seekBar.setLayoutParams(lp);
-                //设置seekbarThumb相对位置可大于进度条15，保证thumb在变成40dp直径后可以滑动到进度条最末尾
-                seekBar.setThumbOffset(15);
-                seekBar.setThumb(Thumb_pressed);
-            }
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                Log.d(TAG,"onStopTrackingTouch");
-                mi.seekTo(seekBar.getProgress());
-                seekBar.setThumbOffset(0);
-                seekBar.setThumb(Thumb_normal);
-                Seekbar_slider_time.setVisibility(View.INVISIBLE);
-            }
-        });
+
         backToRecorder.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
