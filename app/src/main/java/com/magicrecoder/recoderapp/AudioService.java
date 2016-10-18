@@ -203,19 +203,19 @@ public class AudioService extends Service {
                 else {
                     if (isPlayComplete) {
                         bundle.putBoolean("isPlayComplete", true);
+                        Log.d(TAG, "发送消息给主线程,播放已结束");
                     }
                     else{
                         bundle.putBoolean("isPlayComplete", false);
                     }
                     msg.setData(bundle);
                     AudioPlayActivity.handler.sendMessage(msg);
-                    Log.d(TAG, "发送消息给主线程,播放已结束");
                     Log.d(TAG, "结束TimeTask");
                     timer.cancel();
                 }
             }
             //开始计时任务后的5毫秒后第一次执行run方法，以后每500毫秒执行一次
-        }, 100, 500);
+        }, 200, 500);
     }
     //发送录音时常信息
     public void SeedPlayDuration() {
