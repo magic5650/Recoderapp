@@ -6,10 +6,7 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
@@ -34,11 +31,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.magicrecoder.greendao.RecorderInfoDao;
-import com.tencent.mm.sdk.modelmsg.SendMessageToWX;
-import com.tencent.mm.sdk.modelmsg.WXMediaMessage;
-import com.tencent.mm.sdk.modelmsg.WXMusicObject;
-import com.tencent.mm.sdk.openapi.IWXAPI;
-import com.tencent.mm.sdk.openapi.WXAPIFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -48,8 +40,8 @@ import java.util.Locale;
 
 public class AudioPlayActivity extends Activity {
     private static final String TAG = "Lifecycle";
-    public static IWXAPI api;
-    String WX_APP_ID = "wx96692a70ef7c9064";
+/*    public static IWXAPI api;
+    String WX_APP_ID = "wx96692a70ef7c9064";*/
 
     private static SeekBar seekBar;
     private AudioService.MusicInterface mi;
@@ -159,8 +151,8 @@ public class AudioPlayActivity extends Activity {
         conn= new MyServiceConn();
         bindService(intent,conn,BIND_AUTO_CREATE);
 
-        api= WXAPIFactory.createWXAPI(this,WX_APP_ID); //初始化api
-        api.registerApp(WX_APP_ID); //将APP_ID注册到微信中
+/*        api= WXAPIFactory.createWXAPI(this,WX_APP_ID); //初始化api
+        api.registerApp(WX_APP_ID); //将APP_ID注册到微信中*/
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -178,10 +170,6 @@ public class AudioPlayActivity extends Activity {
                 Log.d(TAG,"onStartTrackingTouch");
                 isUserPressThumb = true;
                 Seekbar_slider_time.setVisibility(View.VISIBLE);
-                //设置seekbar高度，解决第一次按下后Thumb被遮盖的问题
-                ViewGroup.LayoutParams  lp = seekBar.getLayoutParams();
-                lp.height *=4;
-                seekBar.setLayoutParams(lp);
                 //设置seekbarThumb相对位置可大于进度条15，保证thumb在变成40dp直径后可以滑动到进度条最末尾
                 seekBar.setThumbOffset(15);
                 seekBar.setThumb(Thumb_pressed);
@@ -193,7 +181,7 @@ public class AudioPlayActivity extends Activity {
                 seekBar.setThumbOffset(0);
                 seekBar.setThumb(Thumb_normal);
                 Seekbar_slider_time.setVisibility(View.INVISIBLE);
-                isUserPressThumb = false;
+                if(!(seekBar.getProgress() == seekBar.getMax())) isUserPressThumb = false;
             }
         });
     }
@@ -514,12 +502,12 @@ public class AudioPlayActivity extends Activity {
      *
      * @param uris
      */
-    private void shareToTimeLine(String title, ArrayList<Uri> uris) {
+/*    private void shareToTimeLine(String title, ArrayList<Uri> uris) {
         Intent intent = new Intent();
         ComponentName comp = new ComponentName("com.tencent.mm", "com.tencent.mm.ui.tools.ShareToTimeLineUI");
         intent.setComponent(comp);
         intent.setAction(Intent.ACTION_SEND_MULTIPLE);
-        intent.setType("audio/*");
+        intent.setType("audio*//*");
         intent.putExtra("Kdescription", title);
         intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
         try
@@ -548,7 +536,7 @@ public class AudioPlayActivity extends Activity {
         SendMessageToWX.Req req = new SendMessageToWX.Req();
         req.message = msg;
         api.sendReq(req);
-    }
+    }*/
     /**
      * 分享图片给好友
      *
