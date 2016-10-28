@@ -181,7 +181,8 @@ public class AudioPlayActivity extends Activity {
                 seekBar.setThumbOffset(0);
                 seekBar.setThumb(Thumb_normal);
                 Seekbar_slider_time.setVisibility(View.INVISIBLE);
-                if(!(seekBar.getProgress() == seekBar.getMax())) isUserPressThumb = false;
+                /*if(!(seekBar.getProgress() == seekBar.getMax())) isUserPressThumb = false;*/
+                isUserPressThumb = false;
             }
         });
     }
